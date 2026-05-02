@@ -27,7 +27,8 @@ class WorkerClient {
   public runTask<T = unknown>(
     type: WorkerTaskType,
     payload?: unknown,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    onLog?: (log: string) => void
   ): Promise<T> {
     const worker = this.getWorker()
 
@@ -40,6 +41,11 @@ class WorkerClient {
         if (response.taskType !== type) return
 
         switch (response.type) {
+          case 'LOG':
+            if (onLog && response.data) {
+              onLog(response.data as string)
+            }
+            break;
           case 'PROGRESS':
             if (onProgress && response.progress !== undefined) {
               onProgress(response.progress)

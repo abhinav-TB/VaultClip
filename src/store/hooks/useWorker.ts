@@ -16,7 +16,7 @@ export const useWorker = () => {
   const dispatch = useAppDispatch()
 
   const startTask = useCallback(
-    async (type: WorkerTaskType, payload?: unknown) => {
+    async <T = unknown>(type: WorkerTaskType, payload?: unknown, onLog?: (log: string) => void) => {
       // 1. Reset potential previous errors and set status
       dispatch(setProcessingError(''))
       // Map WorkerTaskType to ProcessingStatus logically
@@ -24,9 +24,9 @@ export const useWorker = () => {
       dispatch(setProcessingProgress(0))
 
       try {
-        const result = await workerClient.runTask(type, payload, (progress) => {
+        const result = await workerClient.runTask<T>(type, payload, (progress) => {
           dispatch(setProcessingProgress(progress))
-        })
+        }, onLog)
 
         dispatch(setProcessingStatus('complete'))
         return result

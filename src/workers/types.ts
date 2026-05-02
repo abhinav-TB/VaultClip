@@ -7,10 +7,20 @@ export type WorkerTaskType =
   | 'EXTRACT_AUDIO'
   | 'TRANSCRIBE'
   | 'PROCESS_FRAMES'
-  | 'CHALLENGE_RESPONSE' // For the chat logic
-  | 'SIMULATE_WORK' // For testing/bootstrap
+  | 'CHALLENGE_RESPONSE'
 
-export type WorkerMessageType = 'READY' | 'PROGRESS' | 'SUCCESS' | 'ERROR'
+export type WorkerMessageType = 'READY' | 'PROGRESS' | 'SUCCESS' | 'ERROR' | 'LOG'
+
+export interface AttachmentPayload {
+  type: 'image' | 'text'
+  data: string
+  name: string
+}
+
+export interface ChatPayload {
+  prompt: string
+  attachments?: AttachmentPayload[]
+}
 
 export interface WorkerRequest<T = unknown> {
   type: WorkerTaskType
