@@ -11,6 +11,25 @@ export type WorkerTaskType =
 
 export type WorkerMessageType = 'READY' | 'PROGRESS' | 'SUCCESS' | 'ERROR' | 'LOG'
 
+export type ModelLoadStage =
+  | 'checking-cache'
+  | 'loading-cache'
+  | 'downloading'
+  | 'initializing'
+  | 'ready'
+  | 'failed'
+
+export type ModelLoadSource = 'cache' | 'network' | 'memory' | 'unknown'
+
+export interface ModelLoadEvent {
+  stage: ModelLoadStage
+  source: ModelLoadSource
+  message: string
+  file?: string
+  loaded?: number
+  total?: number
+}
+
 export interface AttachmentPayload {
   type: 'image' | 'text'
   data: string

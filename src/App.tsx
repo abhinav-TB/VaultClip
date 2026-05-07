@@ -30,14 +30,23 @@ interface MemoryPerformance extends Performance {
 }
 
 const GemmaChat = () => {
-  const { startTask } = useWorker()
-  const { status } = useAppSelector((state) => state.processing)
+  const { startTask, loadModel } = useWorker()
+  const { status: processingStatus } = useAppSelector((state) => state.processing)
+  const {
+    status: modelStatus,
+    error: modelError,
+    loadStage,
+    loadSource,
+  } = useAppSelector((state) => state.model)
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<{ role: 'user' | 'ai'; content: string; metrics?: ChatMetrics }[]>([])
   const [attachments, setAttachments] = useState<PreviewAttachment[]>([])
+  const modelReady = modelStatus === 'ready'
+  const modelLoading = modelStatus === 'loading'
+  const busy = processingStatus !== 'idle' && processingStatus !== 'complete'
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
+    if (!modelReady || !e.target.files) return;
     const files = Array.from(e.target.files);
     
     for (const file of files) {
@@ -71,7 +80,7 @@ const GemmaChat = () => {
   }
 
   const handleSend = async () => {
-    if ((!input.trim() && attachments.length === 0) || status !== 'idle' && status !== 'complete') return
+    if ((!input.trim() && attachments.length === 0) || busy || !modelReady) return
     
     const userMsg = input;
     const payloadAttachments = attachments.map(a => ({ type: a.type, data: a.content, name: a.file.name }));
@@ -126,11 +135,57 @@ const GemmaChat = () => {
       {/* Header */}
       <div className="bg-gray-800/50 p-4 border-b border-gray-800 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <div className={`w-2 h-2 rounded-full ${
+            modelReady ? 'bg-green-500' : modelLoading ? 'bg-yellow-400 animate-pulse' : modelStatus === 'error' ? 'bg-red-500' : 'bg-gray-500'
+          }`} />
           <span className="text-sm font-medium text-gray-300">Gemma-E2B Local AI</span>
         </div>
-        <span className="text-xs text-gray-500 uppercase tracking-widest font-bold">WebGPU Powered</span>
+        <span className="text-xs text-gray-500 uppercase tracking-widest font-bold">
+          {modelReady ? 'Ready for inference' : modelLoading ? 'Loading model' : modelStatus === 'error' ? 'Model failed' : 'Model not loaded'}
+        </span>
       </div>
+
+      {!modelReady && (
+        <div className="border-b border-gray-800 bg-gray-950/80 px-5 py-4 text-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 flex-1 space-y-3">
+              <p className="font-semibold text-gray-200">
+                {modelLoading
+                  ? 'Gemma is loading before chat can start.'
+                  : modelStatus === 'error'
+                    ? 'Gemma failed to load.'
+                    : 'Load Gemma to enable chat and file analysis.'}
+              </p>
+              <p className="text-xs leading-5 text-gray-500">
+                {modelStatus === 'error'
+                  ? modelError || 'The worker returned an error without details.'
+                  : getLoadingMessage(loadStage, loadSource)}
+              </p>
+
+              {modelLoading && (
+                <div className="space-y-3 rounded-lg border border-gray-800 bg-gray-900/60 p-3">
+                  <div className="h-2 overflow-hidden rounded-full bg-gray-800">
+                    <div className="h-full bg-yellow-400 transition-all duration-500" style={{ width: `${getPhaseProgress(loadStage)}%` }} />
+                  </div>
+                  <div className="grid gap-2 text-[11px] sm:grid-cols-2">
+                    <RuntimeDetail label="Stage" value={getStageLabel(loadStage)} />
+                    <RuntimeDetail label="Source" value={getSourceLabel(loadSource)} />
+                    <RuntimeDetail label="Progress" value={getPhaseProgressLabel(loadStage, loadSource)} wide />
+                  </div>
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadModel().catch(() => undefined)}
+              disabled={modelLoading}
+              className="shrink-0 rounded-lg border border-blue-500/50 bg-blue-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800 disabled:text-gray-500"
+            >
+              {modelStatus === 'error' ? 'Retry Load' : modelLoading ? 'Loading...' : 'Load Model'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -138,7 +193,9 @@ const GemmaChat = () => {
           <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-2">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-2 opacity-50"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
             <p>Private Multimodal Chat</p>
-            <p className="text-xs text-gray-600">Drag files or text into the machine directly.</p>
+            <p className="text-xs text-gray-600">
+              {modelReady ? 'Drag files or text into the machine directly.' : 'Load Gemma before sending prompts or attachments.'}
+            </p>
           </div>
         )}
         {messages.map((m, i) => (
@@ -195,8 +252,12 @@ const GemmaChat = () => {
       {/* Input */}
       <div className="p-4 bg-gray-800/30 border-t border-gray-800 shrink-0">
         <div className="flex gap-2">
-          <label className="p-3 cursor-pointer bg-gray-800 border border-gray-700 text-gray-400 rounded-xl hover:bg-gray-700 hover:border-gray-600 hover:text-white transition-all flex items-center justify-center group shrink-0 shadow-sm">
-             <input type="file" multiple className="hidden" onChange={handleFileSelect} accept="image/*,.txt,.md,.csv,.json,.rtf" />
+          <label className={`p-3 border border-gray-700 rounded-xl transition-all flex items-center justify-center group shrink-0 shadow-sm ${
+            modelReady
+              ? 'cursor-pointer bg-gray-800 text-gray-400 hover:bg-gray-700 hover:border-gray-600 hover:text-white'
+              : 'cursor-not-allowed bg-gray-900 text-gray-700'
+          }`}>
+             <input type="file" multiple className="hidden" onChange={handleFileSelect} accept="image/*,.txt,.md,.csv,.json,.rtf" disabled={!modelReady} />
              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
           </label>
           <input
@@ -204,13 +265,14 @@ const GemmaChat = () => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Ask Gemma something or attach files..."
-            className="flex-1 bg-gray-950 border border-gray-700 rounded-xl px-4 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500 transition-colors shadow-inner"
+            disabled={!modelReady}
+            placeholder={modelReady ? 'Ask Gemma something or attach files...' : 'Load Gemma to start chatting'}
+            className="flex-1 bg-gray-950 border border-gray-700 rounded-xl px-4 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:text-gray-600 transition-colors shadow-inner"
           />
           <button
             onClick={handleSend}
-            disabled={status !== 'idle' && status !== 'complete'}
-            className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500 disabled:opacity-50 transition-colors shadow-md shrink-0"
+            disabled={busy || !modelReady}
+            className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-colors shadow-md shrink-0"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
           </button>
@@ -260,6 +322,111 @@ const LiveMemory = () => {
   );
 };
 
+const ModelRuntimeStatus = () => {
+  const { loadModel } = useWorker()
+  const { status, progress, error, loadStage, loadSource } = useAppSelector((state) => state.model)
+
+  const stateStyles = {
+    idle: {
+      dot: 'bg-gray-500',
+      label: 'MODEL NOT LOADED',
+      text: 'Load Gemma before using chat.',
+    },
+    loading: {
+      dot: 'bg-yellow-400 animate-pulse',
+      label: `MODEL LOADING ${progress}%`,
+      text: `${getStageLabel(loadStage)} via ${getSourceLabel(loadSource)}`,
+    },
+    ready: {
+      dot: 'bg-green-500',
+      label: 'MODEL READY',
+      text: 'Chat and uploads enabled.',
+    },
+    error: {
+      dot: 'bg-red-500',
+      label: 'MODEL FAILED',
+      text: error || 'Load failed without a worker error message.',
+    },
+  }[status]
+
+  return (
+    <div className="flex min-w-0 items-center gap-3 rounded-lg border border-gray-800 bg-gray-950 px-3 py-2">
+      <span className={`h-2 w-2 shrink-0 rounded-full ${stateStyles.dot}`} />
+      <div className="min-w-0">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-300">{stateStyles.label}</div>
+        <div className="max-w-[180px] truncate text-[11px] text-gray-500" title={stateStyles.text}>
+          {stateStyles.text}
+        </div>
+        {status === 'loading' && (
+          <div className="mt-1 h-1 overflow-hidden rounded-full bg-gray-800">
+            <div className="h-full bg-yellow-400 transition-all duration-300" style={{ width: `${progress}%` }} />
+          </div>
+        )}
+      </div>
+      {(status === 'idle' || status === 'error') && (
+        <button
+          type="button"
+          onClick={() => void loadModel().catch(() => undefined)}
+          className="rounded-md border border-blue-500/50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-blue-300 transition-colors hover:bg-blue-500/10"
+        >
+          {status === 'error' ? 'Retry' : 'Load'}
+        </button>
+      )}
+    </div>
+  )
+}
+
+const RuntimeDetail = ({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) => (
+  <div className={wide ? 'min-w-0 sm:col-span-2' : 'min-w-0'}>
+    <div className="text-[10px] font-bold uppercase tracking-wide text-gray-600">{label}</div>
+    <div className="truncate font-mono text-[11px] text-gray-300" title={value}>
+      {value}
+    </div>
+  </div>
+)
+
+function getSourceLabel(source: string) {
+  if (source === 'cache') return 'Browser cache'
+  if (source === 'network') return 'Hugging Face'
+  if (source === 'memory') return 'Worker memory'
+  return 'Checking'
+}
+
+function getStageLabel(stage: string) {
+  if (stage === 'checking-cache') return 'Checking cache'
+  if (stage === 'loading-cache') return 'Reading cached file'
+  if (stage === 'downloading') return 'Downloading model file'
+  if (stage === 'initializing') return 'Initializing WebGPU'
+  if (stage === 'ready') return 'Ready'
+  if (stage === 'failed') return 'Failed'
+  return 'Not loaded'
+}
+
+function getLoadingMessage(stage: string, source: string) {
+  if (stage === 'checking-cache') return 'Checking whether Gemma is already stored in this browser.'
+  if (stage === 'loading-cache') return 'Loading Gemma from browser cache. Chat will unlock when WebGPU initialization finishes.'
+  if (stage === 'downloading') return 'Downloading Gemma model files from Hugging Face, then caching them for future launches.'
+  if (stage === 'initializing') return 'Model files are ready. Initializing Gemma on WebGPU.'
+  return `Preparing Gemma using ${getSourceLabel(source).toLowerCase()}.`
+}
+
+function getPhaseProgress(stage: string) {
+  if (stage === 'checking-cache') return 15
+  if (stage === 'loading-cache') return 55
+  if (stage === 'downloading') return 45
+  if (stage === 'initializing') return 85
+  if (stage === 'ready') return 100
+  return 5
+}
+
+function getPhaseProgressLabel(stage: string, source: string) {
+  if (stage === 'checking-cache') return 'Looking for existing browser storage'
+  if (stage === 'loading-cache') return 'Using cached model files'
+  if (stage === 'downloading') return 'Fetching model files and saving them locally'
+  if (stage === 'initializing') return 'Preparing WebGPU inference session'
+  return `Preparing with ${getSourceLabel(source).toLowerCase()}`
+}
+
 function App() {
   return (
     <div className="flex min-h-screen flex-col bg-gray-950 text-gray-100 font-sans selection:bg-blue-500/30">
@@ -270,10 +437,7 @@ function App() {
           </h1>
           <div className="flex items-center gap-4 text-xs font-medium text-gray-500">
             <LiveMemory />
-            <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-              LOCAL ENGINE READY
-            </span>
+            <ModelRuntimeStatus />
           </div>
         </div>
       </header>

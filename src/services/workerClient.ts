@@ -28,7 +28,7 @@ class WorkerClient {
     type: WorkerTaskType,
     payload?: unknown,
     onProgress?: (progress: number) => void,
-    onLog?: (log: string) => void
+    onLog?: (log: unknown) => void
   ): Promise<T> {
     const worker = this.getWorker()
 
@@ -43,7 +43,7 @@ class WorkerClient {
         switch (response.type) {
           case 'LOG':
             if (onLog && response.data) {
-              onLog(response.data as string)
+              onLog(response.data)
             }
             break;
           case 'PROGRESS':
