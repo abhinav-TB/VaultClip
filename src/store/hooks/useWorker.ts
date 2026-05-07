@@ -19,27 +19,23 @@ export const useWorker = () => {
   const loadModel = useCallback(async () => {
     dispatch(setStatus('loading'))
     dispatch(setProgress(0))
-    let lastProgress = -1
     let lastDetailAt = 0
     let lastDetailKey = ''
     let lastLoadedBytes = 0
+    let visibleProgress = 0
 
     try {
-      await workerClient.runTask('INIT_MODELS', undefined, (progress) => {
-        const nextProgress = Math.floor(progress)
-        if (nextProgress !== lastProgress) {
-          lastProgress = nextProgress
-          dispatch(setProgress(nextProgress))
-        }
-      }, (event) => {
+      await workerClient.runTask('INIT_MODELS', undefined, undefined, (event) => {
         if (isModelLoadEvent(event)) {
           const now = Date.now()
           const detailKey = `${event.stage}|${event.source}|${event.file ?? ''}|${event.total ?? ''}`
           const loadedDelta = Math.abs((event.loaded ?? 0) - lastLoadedBytes)
+          const nextProgress = getVisibleModelProgress(event, visibleProgress)
           const shouldPublish =
             detailKey !== lastDetailKey ||
             now - lastDetailAt > 600 ||
             loadedDelta > 32 * 1024 * 1024 ||
+            nextProgress > visibleProgress ||
             event.stage === 'ready' ||
             event.stage === 'failed'
 
@@ -48,7 +44,9 @@ export const useWorker = () => {
           lastDetailAt = now
           lastDetailKey = detailKey
           lastLoadedBytes = event.loaded ?? lastLoadedBytes
+          visibleProgress = nextProgress
 
+          dispatch(setProgress(visibleProgress))
           dispatch(setLoadDetails({
             loadStage: event.stage,
             loadSource: event.source,
@@ -115,4 +113,32 @@ function isModelLoadEvent(event: unknown): event is ModelLoadEvent {
     'source' in event &&
     'message' in event
   )
+}
+
+function getVisibleModelProgress(event: ModelLoadEvent, currentProgress: number) {
+  const phaseFloor = {
+    'checking-cache': 5,
+    'loading-cache': 20,
+    downloading: 20,
+    initializing: 82,
+    ready: 100,
+    failed: currentProgress,
+  }[event.stage]
+
+  const phaseCeiling = {
+    'checking-cache': 18,
+    'loading-cache': 78,
+    downloading: 78,
+    initializing: 96,
+    ready: 100,
+    failed: currentProgress,
+  }[event.stage]
+
+  let estimate = phaseFloor
+  if (event.loaded && event.total && phaseCeiling > phaseFloor) {
+    const fileProgress = Math.max(0, Math.min(1, event.loaded / event.total))
+    estimate = phaseFloor + Math.round((phaseCeiling - phaseFloor) * fileProgress)
+  }
+
+  return Math.max(currentProgress, Math.min(100, estimate))
 }

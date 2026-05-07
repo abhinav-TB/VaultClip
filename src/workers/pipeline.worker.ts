@@ -391,9 +391,11 @@ async function handleChat(payload: ChatPayload) {
 
     const t0 = performance.now();
 
+    const maxNewTokens = Math.max(32, Math.min(1024, Math.round(payload.maxNewTokens ?? 128)));
+
     const outputTokens = await model.generate({
       ...inputs,
-      max_new_tokens: 128,
+      max_new_tokens: maxNewTokens,
       temperature: 0.7,
       repetition_penalty: 1.1,
       do_sample: true,

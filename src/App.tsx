@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { useAppSelector } from './store/hooks'
 import { useWorker } from './store/hooks/useWorker'
@@ -22,19 +22,17 @@ interface ChatResponse {
   metrics: ChatMetrics
 }
 
-interface MemoryPerformance extends Performance {
-  memory?: {
-    usedJSHeapSize: number
-  }
-  measureUserAgentSpecificMemory?: () => Promise<{ bytes: number }>
+interface GenerationSettings {
+  maxNewTokens: number
 }
 
-const GemmaChat = () => {
+const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
   const { startTask, loadModel } = useWorker()
   const { status: processingStatus } = useAppSelector((state) => state.processing)
   const {
     status: modelStatus,
     error: modelError,
+    progress: modelProgress,
     loadStage,
     loadSource,
   } = useAppSelector((state) => state.model)
@@ -97,7 +95,8 @@ const GemmaChat = () => {
     try {
       const response = await startTask<ChatResponse>('CHALLENGE_RESPONSE', { 
         prompt: userMsg || "Please analyze the attached files.", 
-        attachments: payloadAttachments 
+        attachments: payloadAttachments,
+        maxNewTokens: settings.maxNewTokens,
       }, (log) => {
         if (log.startsWith('[STREAM]')) {
           const chunk = log.replace('[STREAM]', '')
@@ -164,8 +163,11 @@ const GemmaChat = () => {
 
               {modelLoading && (
                 <div className="space-y-3 rounded-lg border border-gray-800 bg-gray-900/60 p-3">
-                  <div className="h-2 overflow-hidden rounded-full bg-gray-800">
-                    <div className="h-full bg-yellow-400 transition-all duration-500" style={{ width: `${getPhaseProgress(loadStage)}%` }} />
+                  <div className="flex items-center gap-3">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-800">
+                      <div className="h-full bg-yellow-400 transition-all duration-500" style={{ width: `${modelProgress}%` }} />
+                    </div>
+                    <span className="w-10 text-right font-mono text-xs text-gray-400">{modelProgress}%</span>
                   </div>
                   <div className="grid gap-2 text-[11px] sm:grid-cols-2">
                     <RuntimeDetail label="Stage" value={getStageLabel(loadStage)} />
@@ -282,49 +284,9 @@ const GemmaChat = () => {
   )
 }
 
-const LiveMemory = () => {
-  const [memory, setMemory] = useState<string>('...');
-
-  useEffect(() => {
-    let isMounted = true;
-    
-    const updateMemory = async () => {
-      // Attempt the advanced cross-origin API first (This correctly aggregates Worker + Main Thread memory!)
-      if ('measureUserAgentSpecificMemory' in performance) {
-        try {
-          const result = await (performance as MemoryPerformance).measureUserAgentSpecificMemory?.();
-          if (!result) return;
-          if (isMounted) setMemory(`${Math.round(result.bytes / (1024 * 1024))} MB`);
-          return;
-        } catch {
-          // If it fails (e.g. rate limited or contexts block), fall through to basic.
-        }
-      }
-      
-      // Basic fallback to the Main Thread's JS Heap
-      const mem = (performance as MemoryPerformance).memory;
-      if (mem && isMounted) {
-        setMemory(`${Math.round(mem.usedJSHeapSize / (1024 * 1024))} MB (Main)`);
-      } else if (isMounted) {
-        setMemory('N/A');
-      }
-    };
-
-    updateMemory();
-    const int = setInterval(updateMemory, 3000); // 3 second tick
-    return () => { isMounted = false; clearInterval(int); };
-  }, []);
-
-  return (
-    <span className="flex items-center gap-1.5 px-3 py-1 bg-gray-800 text-blue-400 rounded-full border border-gray-700 font-mono text-[10px] uppercase font-bold tracking-wider shadow-inner">
-      💾 SYS_RAM: {memory}
-    </span>
-  );
-};
-
 const ModelRuntimeStatus = () => {
   const { loadModel } = useWorker()
-  const { status, progress, error, loadStage, loadSource } = useAppSelector((state) => state.model)
+  const { status, error, loadStage, loadSource } = useAppSelector((state) => state.model)
 
   const stateStyles = {
     idle: {
@@ -334,7 +296,7 @@ const ModelRuntimeStatus = () => {
     },
     loading: {
       dot: 'bg-yellow-400 animate-pulse',
-      label: `MODEL LOADING ${progress}%`,
+      label: 'MODEL LOADING',
       text: `${getStageLabel(loadStage)} via ${getSourceLabel(loadSource)}`,
     },
     ready: {
@@ -357,11 +319,6 @@ const ModelRuntimeStatus = () => {
         <div className="max-w-[180px] truncate text-[11px] text-gray-500" title={stateStyles.text}>
           {stateStyles.text}
         </div>
-        {status === 'loading' && (
-          <div className="mt-1 h-1 overflow-hidden rounded-full bg-gray-800">
-            <div className="h-full bg-yellow-400 transition-all duration-300" style={{ width: `${progress}%` }} />
-          </div>
-        )}
       </div>
       {(status === 'idle' || status === 'error') && (
         <button
@@ -375,6 +332,80 @@ const ModelRuntimeStatus = () => {
     </div>
   )
 }
+
+const SettingsModal = ({
+  settings,
+  onChange,
+  onClose,
+}: {
+  settings: GenerationSettings
+  onChange: (settings: GenerationSettings) => void
+  onClose: () => void
+}) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div className="w-full max-w-md overflow-hidden rounded-xl border border-gray-800 bg-gray-950 shadow-2xl">
+      <div className="flex items-center justify-between border-b border-gray-800 bg-gray-900 px-5 py-4">
+        <div>
+          <h2 id="settings-title" className="text-sm font-bold text-gray-100">Model Settings</h2>
+          <p className="text-xs text-gray-500">Generation settings apply to the next message.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-lg border border-gray-700 p-2 text-gray-400 transition-colors hover:border-gray-600 hover:bg-gray-800 hover:text-white"
+          aria-label="Close settings"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="space-y-5 p-5">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <label htmlFor="settings-max-new-tokens" className="text-sm font-medium text-gray-200">
+              Output length
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="32"
+                max="1024"
+                step="32"
+                value={settings.maxNewTokens}
+                onChange={(e) => onChange({ ...settings, maxNewTokens: clampTokenLimit(Number(e.target.value)) })}
+                className="w-24 rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                aria-label="Maximum output tokens"
+              />
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-600">tokens</span>
+            </div>
+          </div>
+          <input
+            id="settings-max-new-tokens"
+            type="range"
+            min="32"
+            max="1024"
+            step="32"
+            value={settings.maxNewTokens}
+            onChange={(e) => onChange({ ...settings, maxNewTokens: Number(e.target.value) })}
+            className="h-2 w-full cursor-pointer accent-blue-500"
+          />
+          <div className="flex justify-between text-[10px] font-bold uppercase tracking-wide text-gray-600">
+            <span>Short</span>
+            <span>Balanced</span>
+            <span>Long</span>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3 text-xs leading-5 text-gray-500">
+          Higher limits allow longer answers, but generation takes longer and uses more memory while tokens are being produced.
+        </div>
+      </div>
+    </div>
+  </div>
+)
 
 const RuntimeDetail = ({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) => (
   <div className={wide ? 'min-w-0 sm:col-span-2' : 'min-w-0'}>
@@ -410,15 +441,6 @@ function getLoadingMessage(stage: string, source: string) {
   return `Preparing Gemma using ${getSourceLabel(source).toLowerCase()}.`
 }
 
-function getPhaseProgress(stage: string) {
-  if (stage === 'checking-cache') return 15
-  if (stage === 'loading-cache') return 55
-  if (stage === 'downloading') return 45
-  if (stage === 'initializing') return 85
-  if (stage === 'ready') return 100
-  return 5
-}
-
 function getPhaseProgressLabel(stage: string, source: string) {
   if (stage === 'checking-cache') return 'Looking for existing browser storage'
   if (stage === 'loading-cache') return 'Using cached model files'
@@ -427,7 +449,17 @@ function getPhaseProgressLabel(stage: string, source: string) {
   return `Preparing with ${getSourceLabel(source).toLowerCase()}`
 }
 
+function clampTokenLimit(value: number) {
+  if (!Number.isFinite(value)) return 128
+  return Math.max(32, Math.min(1024, Math.round(value / 32) * 32))
+}
+
 function App() {
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [generationSettings, setGenerationSettings] = useState<GenerationSettings>({
+    maxNewTokens: 128,
+  })
+
   return (
     <div className="flex min-h-screen flex-col bg-gray-950 text-gray-100 font-sans selection:bg-blue-500/30">
       <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-md sticky top-0 z-10 p-4">
@@ -436,11 +468,30 @@ function App() {
             CLIP MIND
           </h1>
           <div className="flex items-center gap-4 text-xs font-medium text-gray-500">
-            <LiveMemory />
             <ModelRuntimeStatus />
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="rounded-lg border border-gray-800 bg-gray-950 p-2 text-gray-400 transition-colors hover:border-gray-700 hover:bg-gray-900 hover:text-white"
+              aria-label="Open model settings"
+              title="Model settings"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
           </div>
         </div>
       </header>
+
+      {settingsOpen && (
+        <SettingsModal
+          settings={generationSettings}
+          onChange={setGenerationSettings}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
 
       <main className="flex flex-1 flex-col items-center p-8 gap-12">
         <Routes>
@@ -454,7 +505,7 @@ function App() {
                     <h2 className="text-3xl font-bold tracking-tight">Private Chat</h2>
                     <p className="text-gray-500">Run Gemma-4-E2B multimodal AI directly in your browser. No server, no cloud.</p>
                   </div>
-                  <GemmaChat />
+                  <GemmaChat settings={generationSettings} />
                 </section>
               </div>
             }

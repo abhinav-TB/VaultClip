@@ -39,6 +39,7 @@ export interface AttachmentPayload {
 export interface ChatPayload {
   prompt: string
   attachments?: AttachmentPayload[]
+  maxNewTokens?: number
 }
 
 export interface WorkerRequest<T = unknown> {
