@@ -1,50 +1,99 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 
-export type VideoStatus = 'idle' | 'selected'
+export type VideoStatus = 'idle' | 'loading-metadata' | 'ready' | 'error'
 
 interface VideoState {
+  sessionId: string | null
   fileUrl: string | null
   name: string | null
   size: number | null
   type: string | null
+  duration: number | null
+  lastModified: number | null
   status: VideoStatus
+  error: string | null
+  warnings: string[]
+  rejectionReason: string | null
 }
 
 const initialState: VideoState = {
+  sessionId: null,
   fileUrl: null,
   name: null,
   size: null,
   type: null,
+  duration: null,
+  lastModified: null,
   status: 'idle',
+  error: null,
+  warnings: [],
+  rejectionReason: null,
 }
 
-interface VideoPayload {
+interface VideoLoadingPayload {
+  sessionId: string
   fileUrl: string
   name: string
   size: number
   type: string
+  lastModified: number
+}
+
+interface VideoReadyPayload {
+  sessionId: string
+  duration: number
+  warnings?: string[]
+}
+
+interface VideoErrorPayload {
+  message: string
+  name?: string
+  size?: number
+  type?: string
+  lastModified?: number
 }
 
 export const videoSlice = createSlice({
   name: 'video',
   initialState,
   reducers: {
-    setVideo: (state, action: PayloadAction<VideoPayload>) => {
+    setVideoLoading: (state, action: PayloadAction<VideoLoadingPayload>) => {
+      state.sessionId = action.payload.sessionId
       state.fileUrl = action.payload.fileUrl
       state.name = action.payload.name
       state.size = action.payload.size
       state.type = action.payload.type
-      state.status = 'selected'
+      state.duration = null
+      state.lastModified = action.payload.lastModified
+      state.status = 'loading-metadata'
+      state.error = null
+      state.warnings = []
+      state.rejectionReason = null
     },
-    clearVideo: (state) => {
-      // Free the browser memory URL if it exists
-      if (state.fileUrl) {
-        URL.revokeObjectURL(state.fileUrl)
-      }
-      return initialState
+    setVideoReady: (state, action: PayloadAction<VideoReadyPayload>) => {
+      if (state.sessionId !== action.payload.sessionId) return
+      state.duration = action.payload.duration
+      state.status = 'ready'
+      state.error = null
+      state.warnings = action.payload.warnings ?? []
+      state.rejectionReason = null
     },
+    setVideoError: (state, action: PayloadAction<VideoErrorPayload>) => {
+      state.sessionId = null
+      state.fileUrl = null
+      state.name = action.payload.name ?? null
+      state.size = action.payload.size ?? null
+      state.type = action.payload.type ?? null
+      state.duration = null
+      state.lastModified = action.payload.lastModified ?? null
+      state.status = 'error'
+      state.error = action.payload.message
+      state.warnings = []
+      state.rejectionReason = action.payload.message
+    },
+    clearVideo: () => initialState,
   },
 })
 
-export const { setVideo, clearVideo } = videoSlice.actions
+export const { setVideoLoading, setVideoReady, setVideoError, clearVideo } = videoSlice.actions
 export default videoSlice.reducer
