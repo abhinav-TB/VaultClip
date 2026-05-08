@@ -11,6 +11,9 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@ffmpeg/core": "^0.12.10",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "@huggingface/hub": "^2.11.0",
     "@huggingface/transformers": "^4.2.0",
     "@reduxjs/toolkit": "^2.11.2",

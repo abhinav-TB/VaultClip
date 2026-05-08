@@ -4,6 +4,7 @@ import videoReducer from './slices/videoSlice'
 import processingReducer from './slices/processingSlice'
 import contextReducer from './slices/contextSlice'
 import chatReducer from './slices/chatSlice'
+import audioReducer from './slices/audioSlice'
 
 const appReducer = combineReducers({
   model: modelReducer,
@@ -11,6 +12,7 @@ const appReducer = combineReducers({
   processing: processingReducer,
   context: contextReducer,
   chat: chatReducer,
+  audio: audioReducer,
 })
 
 export const RESET_APP_STATE = 'meta/resetAppState'

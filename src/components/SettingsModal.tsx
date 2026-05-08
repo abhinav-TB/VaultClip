@@ -1,5 +1,8 @@
 import { GenerationSettings } from '../types/generation'
-import { clampTokenLimit, clampVideoDurationLimit, clampVideoSizeLimit } from '../lib/format'
+import { clampTokenLimit, clampVideoDurationLimit, clampVideoSizeLimit, formatAudioSampleRate } from '../lib/format'
+
+const AUDIO_SAMPLE_RATES = [16000, 24000, 48000] as const
+const AUDIO_FORMATS = ['wav', 'flac'] as const
 
 export const SettingsModal = ({
   settings,
@@ -108,8 +111,45 @@ export const SettingsModal = ({
           </div>
         </div>
 
+        <div className="grid gap-4 border-t border-gray-800 pt-5 sm:grid-cols-2">
+          <div className="space-y-2">
+            <label htmlFor="settings-audio-format" className="text-sm font-medium text-gray-200">
+              Audio format
+            </label>
+            <select
+              id="settings-audio-format"
+              value={settings.audioFormat}
+              onChange={(e) => onChange({ ...settings, audioFormat: e.target.value as GenerationSettings['audioFormat'] })}
+              className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm font-semibold uppercase text-gray-200 focus:outline-none focus:border-blue-500"
+            >
+              {AUDIO_FORMATS.map((format) => (
+                <option key={format} value={format}>
+                  {format}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="settings-audio-sample-rate" className="text-sm font-medium text-gray-200">
+              Sample rate
+            </label>
+            <select
+              id="settings-audio-sample-rate"
+              value={settings.audioSampleRate}
+              onChange={(e) => onChange({ ...settings, audioSampleRate: Number(e.target.value) as GenerationSettings['audioSampleRate'] })}
+              className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm font-semibold text-gray-200 focus:outline-none focus:border-blue-500"
+            >
+              {AUDIO_SAMPLE_RATES.map((sampleRate) => (
+                <option key={sampleRate} value={sampleRate}>
+                  {formatAudioSampleRate(sampleRate)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3 text-xs leading-5 text-gray-500">
-          Higher limits allow longer answers and larger videos, but browser processing takes longer and uses more memory.
+          Higher limits allow longer answers and larger videos, but browser processing takes longer and uses more memory. Audio extraction produces mono files for transcription.
         </div>
       </div>
     </div>

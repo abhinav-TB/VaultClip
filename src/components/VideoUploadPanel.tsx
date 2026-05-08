@@ -2,18 +2,26 @@ import { useEffect, useRef } from 'react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { RESET_APP_STATE } from '../store'
 import { setVideoError, setVideoLoading, setVideoReady } from '../store/slices/videoSlice'
+import { clearAudio, setAudioError, setAudioExtracting, setAudioProgress, setAudioReady } from '../store/slices/audioSlice'
+import { setProcessingError, setProcessingProgress, setProcessingStatus } from '../store/slices/processingSlice'
 import { createVideoSessionId, getDurationRejection, getFileExtension, getFileSizeRejection, getFileSizeRejectionForBytes, getVideoBudgetWarnings, getVideoWarnings, isSupportedVideo, readVideoDuration, VIDEO_ACCEPT } from '../lib/video'
-import { formatDuration, formatFileSize } from '../lib/format'
+import { clearVideoFiles, getVideoFile, registerVideoFile } from '../lib/videoFileRegistry'
+import { formatAudioSampleRate, formatDuration, formatFileSize } from '../lib/format'
 import { GenerationSettings } from '../types/generation'
+import { workerClient } from '../services/workerClient'
+import { ExtractAudioResult } from '../workers/types'
 
 export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings }) => {
   const dispatch = useAppDispatch()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const objectUrlRef = useRef<string | null>(null)
+  const audioObjectUrlRef = useRef<string | null>(null)
   const activeSessionRef = useRef<string | null>(null)
   const video = useAppSelector((state) => state.video)
+  const audio = useAppSelector((state) => state.audio)
   const isReady = video.status === 'ready' && video.fileUrl
   const isLoading = video.status === 'loading-metadata'
+  const isExtractingAudio = audio.status === 'extracting'
 
   useEffect(() => {
     objectUrlRef.current = video.fileUrl
@@ -24,6 +32,10 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       if (objectUrlRef.current) {
         URL.revokeObjectURL(objectUrlRef.current)
       }
+      if (audioObjectUrlRef.current) {
+        URL.revokeObjectURL(audioObjectUrlRef.current)
+      }
+      clearVideoFiles()
     }
   }, [])
 
@@ -64,6 +76,14 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
     }
   }
 
+  const revokeAudioObjectUrl = () => {
+    const activeUrl = audioObjectUrlRef.current
+    if (activeUrl) {
+      URL.revokeObjectURL(activeUrl)
+      audioObjectUrlRef.current = null
+    }
+  }
+
   const resetInput = () => {
     if (inputRef.current) {
       inputRef.current.value = ''
@@ -73,8 +93,89 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
   const resetVideoSession = () => {
     activeSessionRef.current = null
     revokeActiveObjectUrl()
+    revokeAudioObjectUrl()
+    clearVideoFiles()
     resetInput()
     dispatch({ type: RESET_APP_STATE })
+  }
+
+  const handleExtractAudio = async () => {
+    if (!video.sessionId || video.status !== 'ready' || isExtractingAudio) return
+
+    const file = getVideoFile(video.sessionId)
+    if (!file) {
+      dispatch(setAudioError({
+        sessionId: video.sessionId,
+        message: 'The selected video file is no longer available in browser memory. Replace the video and try again.',
+      }))
+      return
+    }
+
+    revokeAudioObjectUrl()
+    dispatch(clearAudio())
+    dispatch(setAudioExtracting({
+      sessionId: video.sessionId,
+      format: settings.audioFormat,
+      sampleRate: settings.audioSampleRate,
+      duration: video.duration,
+    }))
+    dispatch(setProcessingStatus('extracting-audio'))
+    dispatch(setProcessingProgress(0))
+    dispatch(setProcessingError(''))
+
+    try {
+      const result = await workerClient.runTask<ExtractAudioResult>('EXTRACT_AUDIO', {
+        sessionId: video.sessionId,
+        file,
+        inputName: video.name ?? file.name,
+        outputFormat: settings.audioFormat,
+        sampleRate: settings.audioSampleRate,
+      }, (progress) => {
+        dispatch(setAudioProgress({
+          progress,
+          phase: progress < 15 ? 'Loading ffmpeg' : progress < 96 ? 'Extracting audio' : 'Finalizing audio',
+        }))
+        dispatch(setProcessingProgress(progress))
+      }, (log) => {
+        if (typeof log === 'string') {
+          dispatch(setAudioProgress({
+            progress: audio.progress,
+            phase: log,
+          }))
+        }
+      })
+
+      if (activeSessionRef.current !== result.sessionId) return
+
+      const audioBytes: Uint8Array<ArrayBuffer> = new Uint8Array(result.bytes.byteLength)
+      audioBytes.set(result.bytes)
+      const blob = new Blob([audioBytes.buffer], { type: result.mimeType })
+      const objectUrl = URL.createObjectURL(blob)
+      audioObjectUrlRef.current = objectUrl
+
+      dispatch(setAudioReady({
+        sessionId: result.sessionId,
+        objectUrl,
+        format: result.format,
+        sampleRate: result.sampleRate,
+        channels: result.channels,
+        duration: video.duration,
+        size: result.size,
+        fileName: result.fileName,
+        mimeType: result.mimeType,
+      }))
+      dispatch(setProcessingStatus('complete'))
+      dispatch(setProcessingProgress(100))
+    } catch (err) {
+      if (activeSessionRef.current !== video.sessionId) return
+      const message = err instanceof Error ? err.message : 'Audio extraction failed.'
+      dispatch(setAudioError({
+        sessionId: video.sessionId,
+        message,
+      }))
+      dispatch(setProcessingError(message))
+      dispatch(setProcessingStatus('idle'))
+    }
   }
 
   const handleFiles = async (files: FileList | File[]) => {
@@ -82,6 +183,8 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
     if (!file) return
 
     revokeActiveObjectUrl()
+    revokeAudioObjectUrl()
+    clearVideoFiles()
     activeSessionRef.current = null
     dispatch({ type: RESET_APP_STATE })
 
@@ -134,6 +237,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
           objectUrlRef.current = null
         }
         activeSessionRef.current = null
+        clearVideoFiles()
         dispatch(setVideoError({
           message: durationRejection,
           name: file.name,
@@ -144,6 +248,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
         return
       }
 
+      registerVideoFile(sessionId, file)
       dispatch(setVideoReady({
         sessionId,
         duration,
@@ -155,6 +260,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       if (objectUrlRef.current === fileUrl) {
         objectUrlRef.current = null
       }
+      clearVideoFiles()
       dispatch(setVideoError({
         message: 'This video could not be previewed in the browser. Try a different MP4, WebM, Ogg, or MOV file.',
         name: file.name,
@@ -276,6 +382,56 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
                 </ul>
               </div>
             )}
+
+            <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-100">Transcription audio</p>
+                  <p className="mt-1 text-xs leading-5 text-gray-500">
+                    Output: mono {settings.audioFormat.toUpperCase()} at {formatAudioSampleRate(settings.audioSampleRate)}.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleExtractAudio()}
+                  disabled={isExtractingAudio}
+                  className="shrink-0 rounded-lg border border-blue-500/50 bg-blue-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800 disabled:text-gray-500"
+                >
+                  {audio.status === 'ready' ? 'Extract Again' : isExtractingAudio ? 'Extracting...' : 'Extract Audio'}
+                </button>
+              </div>
+
+              {isExtractingAudio && (
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-800">
+                      <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${audio.progress}%` }} />
+                    </div>
+                    <span className="w-10 text-right font-mono text-xs text-gray-400">{audio.progress}%</span>
+                  </div>
+                  <p className="text-xs text-gray-500">{audio.phase ?? 'Extracting audio'}</p>
+                </div>
+              )}
+
+              {audio.status === 'error' && (
+                <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
+                  <p className="text-sm font-semibold text-red-100">Audio extraction failed</p>
+                  <p className="mt-1 text-sm leading-6 text-red-200/80">{audio.error}</p>
+                </div>
+              )}
+
+              {audio.status === 'ready' && audio.objectUrl && (
+                <div className="mt-4 space-y-3">
+                  <audio src={audio.objectUrl} controls className="w-full" />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <VideoMetadataItem label="Audio file" value={audio.fileName ?? 'Unknown'} />
+                    <VideoMetadataItem label="Audio size" value={formatFileSize(audio.size)} />
+                    <VideoMetadataItem label="Format" value={(audio.format ?? settings.audioFormat).toUpperCase()} />
+                    <VideoMetadataItem label="Sample rate" value={formatAudioSampleRate(audio.sampleRate ?? settings.audioSampleRate)} />
+                  </div>
+                </div>
+              )}
+            </div>
           </>
         )}
 

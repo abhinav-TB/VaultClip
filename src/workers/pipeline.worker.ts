@@ -1,5 +1,10 @@
-import { ChatPayload, ModelLoadEvent, ModelLoadSource, WorkerRequest, WorkerResponse } from './types'
+import { ChatPayload, ExtractAudioPayload, ModelLoadEvent, ModelLoadSource, WorkerRequest, WorkerResponse } from './types'
 import { env, TextStreamer, RawImage, AutoProcessor, Gemma4ForConditionalGeneration } from '@huggingface/transformers'
+import { FFmpeg } from '@ffmpeg/ffmpeg'
+import { fetchFile } from '@ffmpeg/util'
+import ffmpegClassWorkerURL from '../../node_modules/@ffmpeg/ffmpeg/dist/esm/worker.js?url'
+import ffmpegCoreURL from '../../node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js?url'
+import ffmpegWasmURL from '../../node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm?url'
 
 // Skip local model checks since we don't have them pre-downloaded
 env.allowLocalModels = false;
@@ -18,6 +23,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       case 'CHALLENGE_RESPONSE':
         await handleChat(payload as ChatPayload)
+        break
+      case 'EXTRACT_AUDIO':
+        await handleExtractAudio(payload as ExtractAudioPayload)
         break
       default:
         sendResponse({
@@ -211,6 +219,7 @@ interface GeneratorModelLike {
 // Cache native models to bypass pipeline() architecture mapping wrappers
 let gProcessor: ProcessorLike | null = null;
 let gModel: GeneratorModelLike | null = null;
+let ffmpeg: FFmpeg | null = null;
 
 async function getGenerator(taskType: WorkerRequest['type'] = 'CHALLENGE_RESPONSE') {
   // 1. Verify WebGPU Support before attempting to load
@@ -321,6 +330,152 @@ async function handleInitModels() {
       error: err instanceof Error ? err.message : String(err),
     });
   }
+}
+
+async function getFFmpeg(taskType: WorkerRequest['type']) {
+  if (ffmpeg?.loaded) return ffmpeg
+
+  ffmpeg = new FFmpeg()
+  sendResponse({
+    type: 'LOG',
+    taskType,
+    data: 'Loading ffmpeg',
+  })
+  sendResponse({
+    type: 'PROGRESS',
+    taskType,
+    progress: 5,
+  })
+
+  await ffmpeg.load({
+    classWorkerURL: ffmpegClassWorkerURL,
+    coreURL: ffmpegCoreURL,
+    wasmURL: ffmpegWasmURL,
+  })
+
+  sendResponse({
+    type: 'PROGRESS',
+    taskType,
+    progress: 15,
+  })
+
+  return ffmpeg
+}
+
+async function handleExtractAudio(payload: ExtractAudioPayload) {
+  const taskType = 'EXTRACT_AUDIO'
+  const inputName = `input-${payload.sessionId}${getSafeExtension(payload.inputName) || '.video'}`
+  const outputName = `audio-${payload.sessionId}.${payload.outputFormat}`
+  let activeFFmpeg: FFmpeg | null = null
+  let progressHandler: ((event: { progress: number }) => void) | null = null
+  let lastProgress = 15
+
+  try {
+    activeFFmpeg = await getFFmpeg(taskType)
+    sendResponse({
+      type: 'LOG',
+      taskType,
+      data: 'Extracting audio',
+    })
+
+    progressHandler = ({ progress }: { progress: number }) => {
+      const normalizedProgress = progress > 1 ? progress / 100 : progress
+      const visibleProgress = 15 + Math.round(Math.max(0, Math.min(1, normalizedProgress)) * 80)
+      if (visibleProgress <= lastProgress) return
+      lastProgress = visibleProgress
+      sendResponse({
+        type: 'PROGRESS',
+        taskType,
+        progress: visibleProgress,
+      })
+    }
+
+    activeFFmpeg.on('progress', progressHandler)
+    await activeFFmpeg.writeFile(inputName, await fetchFile(payload.file))
+
+    const codecArgs = payload.outputFormat === 'wav'
+      ? ['-c:a', 'pcm_s16le']
+      : ['-c:a', 'flac']
+
+    const exitCode = await activeFFmpeg.exec([
+      '-i',
+      inputName,
+      '-vn',
+      '-ac',
+      '1',
+      '-ar',
+      String(payload.sampleRate),
+      ...codecArgs,
+      outputName,
+    ])
+
+    if (exitCode !== 0) {
+      throw new Error(`ffmpeg exited with code ${exitCode}.`)
+    }
+
+    sendResponse({
+      type: 'LOG',
+      taskType,
+      data: 'Finalizing audio',
+    })
+    sendResponse({
+      type: 'PROGRESS',
+      taskType,
+      progress: 96,
+    })
+
+    const data = await activeFFmpeg.readFile(outputName)
+    const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
+
+    sendResponse({
+      type: 'PROGRESS',
+      taskType,
+      progress: 100,
+    })
+    sendResponse({
+      type: 'SUCCESS',
+      taskType,
+      data: {
+        sessionId: payload.sessionId,
+        bytes,
+        mimeType: payload.outputFormat === 'wav' ? 'audio/wav' : 'audio/flac',
+        fileName: outputName,
+        size: bytes.byteLength,
+        format: payload.outputFormat,
+        sampleRate: payload.sampleRate,
+        channels: 1,
+      },
+    })
+  } catch (err) {
+    sendResponse({
+      type: 'ERROR',
+      taskType,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  } finally {
+    if (activeFFmpeg) {
+      if (progressHandler) {
+        activeFFmpeg.off('progress', progressHandler)
+      }
+      await deleteFFmpegFile(activeFFmpeg, inputName)
+      await deleteFFmpegFile(activeFFmpeg, outputName)
+    }
+  }
+}
+
+async function deleteFFmpegFile(activeFFmpeg: FFmpeg, path: string) {
+  try {
+    await activeFFmpeg.deleteFile(path)
+  } catch {
+    // Ignore cleanup misses; extraction may fail before a file exists.
+  }
+}
+
+function getSafeExtension(fileName: string) {
+  const index = fileName.lastIndexOf('.')
+  if (index < 0) return ''
+  const extension = fileName.slice(index).toLowerCase().replace(/[^a-z0-9.]/g, '')
+  return extension.length > 12 ? '' : extension
 }
 
 async function handleChat(payload: ChatPayload) {

@@ -42,6 +42,28 @@ export interface ChatPayload {
   maxNewTokens?: number
 }
 
+export type AudioFormat = 'wav' | 'flac'
+export type AudioSampleRate = 16000 | 24000 | 48000
+
+export interface ExtractAudioPayload {
+  sessionId: string
+  file: File
+  inputName: string
+  outputFormat: AudioFormat
+  sampleRate: AudioSampleRate
+}
+
+export interface ExtractAudioResult {
+  sessionId: string
+  bytes: Uint8Array
+  mimeType: string
+  fileName: string
+  size: number
+  format: AudioFormat
+  sampleRate: AudioSampleRate
+  channels: 1
+}
+
 export interface WorkerRequest<T = unknown> {
   type: WorkerTaskType
   payload?: T

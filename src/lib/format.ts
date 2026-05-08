@@ -40,3 +40,7 @@ export function clampVideoDurationLimit(value: number) {
   if (!Number.isFinite(value)) return 10
   return Math.max(1, Math.min(120, Math.round(value)))
 }
+
+export function formatAudioSampleRate(sampleRate: number) {
+  return sampleRate >= 1000 ? `${sampleRate / 1000} kHz` : `${sampleRate} Hz`
+}

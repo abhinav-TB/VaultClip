@@ -13,6 +13,8 @@ function App() {
     maxNewTokens: 128,
     maxVideoSizeMb: 100,
     maxVideoDurationMinutes: 10,
+    audioSampleRate: 16000,
+    audioFormat: 'wav',
   })
 
   return (
@@ -79,7 +81,7 @@ function App() {
       </main>
 
       <footer className="p-8 text-center border-t border-gray-900 text-gray-600 text-xs tracking-widest uppercase font-bold">
-        Built with Google DeepMind & WebGPU Technology
+        Built with Gemma
       </footer>
     </div>
   )
