@@ -9,7 +9,7 @@ export type WorkerTaskType =
   | 'PROCESS_FRAMES'
   | 'CHALLENGE_RESPONSE'
 
-export type WorkerMessageType = 'READY' | 'PROGRESS' | 'SUCCESS' | 'ERROR' | 'LOG'
+export type WorkerMessageType = 'READY' | 'PROGRESS' | 'SUCCESS' | 'ERROR' | 'LOG' | 'PARTIAL'
 
 export type ModelLoadStage =
   | 'checking-cache'
@@ -62,6 +62,38 @@ export interface ExtractAudioResult {
   format: AudioFormat
   sampleRate: AudioSampleRate
   channels: 1
+}
+
+export interface TranscriptSegment {
+  id: string
+  index: number
+  startTime: number
+  endTime: number
+  text: string
+  source: 'gemma-audio-chunk'
+}
+
+export interface TranscribePayload {
+  sessionId: string
+  bytes: Uint8Array
+  mimeType: string
+  sampleRate: number
+  duration: number | null
+  maxNewTokens: 512 | 1024 | 2048 | 'unlimited'
+  chunkSeconds: number
+  overlapSeconds: number
+}
+
+export interface TranscribeResult {
+  sessionId: string
+  segments: TranscriptSegment[]
+  rawText: string
+}
+
+export interface TranscribePartialResult {
+  sessionId: string
+  segments: TranscriptSegment[]
+  rawText: string
 }
 
 export interface WorkerRequest<T = unknown> {

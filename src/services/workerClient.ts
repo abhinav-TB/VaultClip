@@ -28,7 +28,8 @@ class WorkerClient {
     type: WorkerTaskType,
     payload?: unknown,
     onProgress?: (progress: number) => void,
-    onLog?: (log: unknown) => void
+    onLog?: (log: unknown) => void,
+    onPartial?: (partial: unknown) => void
   ): Promise<T> {
     const worker = this.getWorker()
 
@@ -49,6 +50,12 @@ class WorkerClient {
           case 'PROGRESS':
             if (onProgress && response.progress !== undefined) {
               onProgress(response.progress)
+            }
+            break
+
+          case 'PARTIAL':
+            if (onPartial && response.data) {
+              onPartial(response.data)
             }
             break
 

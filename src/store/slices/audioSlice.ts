@@ -1,7 +1,7 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 
 export type AudioStatus = 'idle' | 'extracting' | 'ready' | 'error'
-export type AudioFormat = 'wav' | 'flac'
+export type AudioFormat = 'wav' | 'flac' | 'source'
 export type AudioSampleRate = 16000 | 24000 | 48000
 
 interface AudioState {
@@ -84,10 +84,11 @@ export const audioSlice = createSlice({
       state.phase = action.payload.phase ?? state.phase
     },
     setAudioReady: (state, action: PayloadAction<AudioReadyPayload>) => {
-      if (state.sessionId !== action.payload.sessionId) return
+      if (state.sessionId && state.sessionId !== action.payload.sessionId) return
       state.status = 'ready'
       state.progress = 100
       state.phase = 'Audio ready'
+      state.sessionId = action.payload.sessionId
       state.objectUrl = action.payload.objectUrl
       state.format = action.payload.format
       state.sampleRate = action.payload.sampleRate

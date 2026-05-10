@@ -1,6 +1,8 @@
 export const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime']
 export const ACCEPTED_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogg', '.mov']
-export const VIDEO_ACCEPT = `${ACCEPTED_VIDEO_TYPES.join(',')},${ACCEPTED_VIDEO_EXTENSIONS.join(',')}`
+export const ACCEPTED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/ogg', 'audio/opus', 'audio/webm']
+export const ACCEPTED_AUDIO_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.opus', '.webm']
+export const VIDEO_ACCEPT = `${ACCEPTED_VIDEO_TYPES.join(',')},${ACCEPTED_VIDEO_EXTENSIONS.join(',')},${ACCEPTED_AUDIO_TYPES.join(',')},${ACCEPTED_AUDIO_EXTENSIONS.join(',')}`
 export const NEAR_LIMIT_THRESHOLD = 0.8
 
 export interface VideoBudgetSettings {
@@ -13,6 +15,11 @@ export function isSupportedVideo(file: File) {
   return ACCEPTED_VIDEO_TYPES.includes(file.type) || ACCEPTED_VIDEO_EXTENSIONS.includes(extension)
 }
 
+export function isSupportedAudio(file: File) {
+  const extension = getFileExtension(file.name)
+  return ACCEPTED_AUDIO_TYPES.includes(file.type) || ACCEPTED_AUDIO_EXTENSIONS.includes(extension)
+}
+
 export function getFileSizeRejection(file: File, settings: VideoBudgetSettings) {
   return getFileSizeRejectionForBytes(file.size, settings)
 }
@@ -22,7 +29,7 @@ export function getFileSizeRejectionForBytes(size: number | null, settings: Vide
   const maxBytes = settings.maxVideoSizeMb * 1024 * 1024
   if (size <= maxBytes) return null
 
-  return `This video is ${(size / (1024 * 1024)).toFixed(1)} MB, which exceeds the ${settings.maxVideoSizeMb} MB MVP limit.`
+  return `This file is ${(size / (1024 * 1024)).toFixed(1)} MB, which exceeds the ${settings.maxVideoSizeMb} MB MVP limit.`
 }
 
 export function getDurationRejection(duration: number | null, settings: VideoBudgetSettings) {
@@ -30,7 +37,7 @@ export function getDurationRejection(duration: number | null, settings: VideoBud
   const maxSeconds = settings.maxVideoDurationMinutes * 60
   if (duration <= maxSeconds) return null
 
-  return `This video is ${formatVideoBudgetDuration(duration)}, which exceeds the ${settings.maxVideoDurationMinutes} minute MVP limit.`
+  return `This file is ${formatVideoBudgetDuration(duration)}, which exceeds the ${settings.maxVideoDurationMinutes} minute MVP limit.`
 }
 
 export function getVideoWarnings(file: File, duration: number, settings: VideoBudgetSettings) {
@@ -83,6 +90,32 @@ export function readVideoDuration(fileUrl: string) {
     probe.onerror = () => {
       cleanup()
       reject(new Error('Video metadata could not be loaded.'))
+    }
+    probe.src = fileUrl
+  })
+}
+
+export function readAudioDuration(fileUrl: string) {
+  return new Promise<number>((resolve, reject) => {
+    const probe = document.createElement('audio')
+    const cleanup = () => {
+      probe.removeAttribute('src')
+      probe.load()
+    }
+
+    probe.preload = 'metadata'
+    probe.onloadedmetadata = () => {
+      const duration = probe.duration
+      cleanup()
+      if (Number.isFinite(duration) && duration > 0) {
+        resolve(duration)
+      } else {
+        reject(new Error('Audio duration was not available.'))
+      }
+    }
+    probe.onerror = () => {
+      cleanup()
+      reject(new Error('Audio metadata could not be loaded.'))
     }
     probe.src = fileUrl
   })

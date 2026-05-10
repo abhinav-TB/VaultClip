@@ -41,6 +41,17 @@ export function clampVideoDurationLimit(value: number) {
   return Math.max(1, Math.min(120, Math.round(value)))
 }
 
+export function clampTranscriptChunkSeconds(value: number) {
+  if (!Number.isFinite(value)) return 30
+  return Math.max(10, Math.min(30, Math.round(value)))
+}
+
+export function clampTranscriptOverlapSeconds(value: number, chunkSeconds: number) {
+  if (!Number.isFinite(value)) return 0.1
+  const maxOverlap = Math.max(0, chunkSeconds - 0.1)
+  return Math.max(0, Math.min(maxOverlap, Math.round(value * 10) / 10))
+}
+
 export function formatAudioSampleRate(sampleRate: number) {
   return sampleRate >= 1000 ? `${sampleRate / 1000} kHz` : `${sampleRate} Hz`
 }

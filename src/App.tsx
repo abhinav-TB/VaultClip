@@ -11,10 +11,13 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [generationSettings, setGenerationSettings] = useState<GenerationSettings>({
     maxNewTokens: 128,
+    transcriptMaxNewTokens: 512,
     maxVideoSizeMb: 100,
     maxVideoDurationMinutes: 10,
     audioSampleRate: 16000,
     audioFormat: 'wav',
+    transcriptChunkSeconds: 30,
+    transcriptOverlapSeconds: 0.1,
   })
 
   return (

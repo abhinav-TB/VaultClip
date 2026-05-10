@@ -1,8 +1,10 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 
 export type VideoStatus = 'idle' | 'loading-metadata' | 'ready' | 'error'
+export type MediaKind = 'video' | 'audio'
 
 interface VideoState {
+  mediaKind: MediaKind | null
   sessionId: string | null
   fileUrl: string | null
   name: string | null
@@ -17,6 +19,7 @@ interface VideoState {
 }
 
 const initialState: VideoState = {
+  mediaKind: null,
   sessionId: null,
   fileUrl: null,
   name: null,
@@ -31,6 +34,7 @@ const initialState: VideoState = {
 }
 
 interface VideoLoadingPayload {
+  mediaKind: MediaKind
   sessionId: string
   fileUrl: string
   name: string
@@ -47,6 +51,7 @@ interface VideoReadyPayload {
 
 interface VideoErrorPayload {
   message: string
+  mediaKind?: MediaKind | null
   name?: string
   size?: number
   type?: string
@@ -58,6 +63,7 @@ export const videoSlice = createSlice({
   initialState,
   reducers: {
     setVideoLoading: (state, action: PayloadAction<VideoLoadingPayload>) => {
+      state.mediaKind = action.payload.mediaKind
       state.sessionId = action.payload.sessionId
       state.fileUrl = action.payload.fileUrl
       state.name = action.payload.name
@@ -79,6 +85,7 @@ export const videoSlice = createSlice({
       state.rejectionReason = null
     },
     setVideoError: (state, action: PayloadAction<VideoErrorPayload>) => {
+      state.mediaKind = action.payload.mediaKind ?? null
       state.sessionId = null
       state.fileUrl = null
       state.name = action.payload.name ?? null

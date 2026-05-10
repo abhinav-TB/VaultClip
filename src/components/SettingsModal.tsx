@@ -1,8 +1,9 @@
 import { GenerationSettings } from '../types/generation'
-import { clampTokenLimit, clampVideoDurationLimit, clampVideoSizeLimit, formatAudioSampleRate } from '../lib/format'
+import { clampTokenLimit, clampTranscriptChunkSeconds, clampTranscriptOverlapSeconds, clampVideoDurationLimit, clampVideoSizeLimit, formatAudioSampleRate } from '../lib/format'
 
 const AUDIO_SAMPLE_RATES = [16000, 24000, 48000] as const
 const AUDIO_FORMATS = ['wav', 'flac'] as const
+const TRANSCRIPT_TOKEN_OPTIONS = [512, 1024, 2048, 'unlimited'] as const
 
 export const SettingsModal = ({
   settings,
@@ -34,6 +35,11 @@ export const SettingsModal = ({
       </div>
 
       <div className="space-y-5 p-5">
+        <SettingsSectionTitle
+          title="Chat"
+          description="Controls replies in the private chat panel only."
+        />
+
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-4">
             <label htmlFor="settings-max-new-tokens" className="text-sm font-medium text-gray-200">
@@ -70,7 +76,97 @@ export const SettingsModal = ({
           </div>
         </div>
 
-        <div className="grid gap-4 border-t border-gray-800 pt-5 sm:grid-cols-2">
+        <SettingsSectionTitle
+          title="Transcription"
+          description="Controls Gemma transcript generation after audio has been extracted."
+        />
+
+        <div className="space-y-2">
+          <label htmlFor="settings-transcript-max-new-tokens" className="text-sm font-medium text-gray-200">
+            Transcript output length
+          </label>
+          <select
+            id="settings-transcript-max-new-tokens"
+            value={settings.transcriptMaxNewTokens}
+            onChange={(e) => {
+              const value = e.target.value === 'unlimited'
+                ? 'unlimited'
+                : Number(e.target.value) as GenerationSettings['transcriptMaxNewTokens']
+              onChange({ ...settings, transcriptMaxNewTokens: value })
+            }}
+            className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm font-semibold text-gray-200 focus:outline-none focus:border-blue-500"
+          >
+            {TRANSCRIPT_TOKEN_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option === 'unlimited' ? 'Unlimited per chunk' : `${option} tokens per chunk`}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs leading-5 text-gray-500">
+            Applies only to transcription. Chat output length stays separate.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <label htmlFor="settings-transcript-chunk-seconds" className="text-sm font-medium text-gray-200">
+              Transcript chunk
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="settings-transcript-chunk-seconds"
+                type="number"
+                min="10"
+                max="30"
+                step="5"
+                value={settings.transcriptChunkSeconds}
+                onChange={(e) => {
+                  const chunkSeconds = clampTranscriptChunkSeconds(Number(e.target.value))
+                  onChange({
+                    ...settings,
+                    transcriptChunkSeconds: chunkSeconds,
+                    transcriptOverlapSeconds: clampTranscriptOverlapSeconds(settings.transcriptOverlapSeconds, chunkSeconds),
+                  })
+                }}
+                className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                aria-label="Transcript chunk length in seconds"
+              />
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-600">sec</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="settings-transcript-overlap-seconds" className="text-sm font-medium text-gray-200">
+              Chunk overlap
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="settings-transcript-overlap-seconds"
+                type="number"
+                min="0"
+                max={Math.max(0, settings.transcriptChunkSeconds - 0.1)}
+                step="0.1"
+                value={settings.transcriptOverlapSeconds}
+                onChange={(e) => onChange({
+                  ...settings,
+                  transcriptOverlapSeconds: clampTranscriptOverlapSeconds(Number(e.target.value), settings.transcriptChunkSeconds),
+                })}
+                className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                aria-label="Transcript chunk overlap in seconds"
+              />
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-600">sec</span>
+            </div>
+          </div>
+        </div>
+        <p className="text-xs leading-5 text-gray-500">
+          Gemma audio input is capped to roughly 30 seconds. Longer chunks can silently miss later speech.
+        </p>
+
+        <SettingsSectionTitle
+          title="Video Guardrails"
+          description="Controls which uploaded videos are accepted before expensive browser processing starts."
+        />
+
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <label htmlFor="settings-max-video-size" className="text-sm font-medium text-gray-200">
               Max file size
@@ -111,7 +207,12 @@ export const SettingsModal = ({
           </div>
         </div>
 
-        <div className="grid gap-4 border-t border-gray-800 pt-5 sm:grid-cols-2">
+        <SettingsSectionTitle
+          title="Audio Extraction"
+          description="Controls the local audio file produced from the selected video before transcription."
+        />
+
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <label htmlFor="settings-audio-format" className="text-sm font-medium text-gray-200">
               Audio format
@@ -153,5 +254,12 @@ export const SettingsModal = ({
         </div>
       </div>
     </div>
+  </div>
+)
+
+const SettingsSectionTitle = ({ title, description }: { title: string; description: string }) => (
+  <div className="border-t border-gray-800 pt-5 first:border-t-0 first:pt-0">
+    <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">{title}</h3>
+    <p className="mt-1 text-xs leading-5 text-gray-500">{description}</p>
   </div>
 )

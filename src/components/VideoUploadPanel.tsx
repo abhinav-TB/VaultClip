@@ -1,15 +1,17 @@
 import { useEffect, useRef } from 'react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { RESET_APP_STATE } from '../store'
-import { setVideoError, setVideoLoading, setVideoReady } from '../store/slices/videoSlice'
+import { MediaKind, setVideoError, setVideoLoading, setVideoReady } from '../store/slices/videoSlice'
 import { clearAudio, setAudioError, setAudioExtracting, setAudioProgress, setAudioReady } from '../store/slices/audioSlice'
 import { setProcessingError, setProcessingProgress, setProcessingStatus } from '../store/slices/processingSlice'
-import { createVideoSessionId, getDurationRejection, getFileExtension, getFileSizeRejection, getFileSizeRejectionForBytes, getVideoBudgetWarnings, getVideoWarnings, isSupportedVideo, readVideoDuration, VIDEO_ACCEPT } from '../lib/video'
+import { appendTranscriptSegments, clearContext, setTranscriptError, setTranscriptPhase, setTranscriptProgress, setTranscriptResult, setTranscriptTranscribing } from '../store/slices/contextSlice'
+import { createVideoSessionId, getDurationRejection, getFileExtension, getFileSizeRejection, getFileSizeRejectionForBytes, getVideoBudgetWarnings, getVideoWarnings, isSupportedAudio, isSupportedVideo, readAudioDuration, readVideoDuration, VIDEO_ACCEPT } from '../lib/video'
+import { clearAudioData, getAudioData, registerAudioData } from '../lib/audioDataRegistry'
 import { clearVideoFiles, getVideoFile, registerVideoFile } from '../lib/videoFileRegistry'
 import { formatAudioSampleRate, formatDuration, formatFileSize } from '../lib/format'
 import { GenerationSettings } from '../types/generation'
 import { workerClient } from '../services/workerClient'
-import { ExtractAudioResult } from '../workers/types'
+import { ExtractAudioResult, TranscribePartialResult, TranscribeResult } from '../workers/types'
 
 export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings }) => {
   const dispatch = useAppDispatch()
@@ -19,9 +21,15 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
   const activeSessionRef = useRef<string | null>(null)
   const video = useAppSelector((state) => state.video)
   const audio = useAppSelector((state) => state.audio)
+  const transcript = useAppSelector((state) => state.context)
+  const modelStatus = useAppSelector((state) => state.model.status)
   const isReady = video.status === 'ready' && video.fileUrl
+  const isAudioInput = video.mediaKind === 'audio'
+  const isVideoInput = video.mediaKind === 'video'
   const isLoading = video.status === 'loading-metadata'
   const isExtractingAudio = audio.status === 'extracting'
+  const isTranscribing = transcript.transcriptStatus === 'transcribing'
+  const modelReady = modelStatus === 'ready'
 
   useEffect(() => {
     objectUrlRef.current = video.fileUrl
@@ -36,6 +44,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
         URL.revokeObjectURL(audioObjectUrlRef.current)
       }
       clearVideoFiles()
+      clearAudioData()
     }
   }, [])
 
@@ -47,10 +56,16 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
 
     if (sizeRejection || durationRejection) {
       revokeActiveObjectUrl()
+      revokeAudioObjectUrl()
+      clearAudioData()
+      clearVideoFiles()
       activeSessionRef.current = null
+      dispatch(clearAudio())
+      dispatch(clearContext())
       dispatch(setVideoError({
         message: sizeRejection || durationRejection || 'This video exceeds the configured MVP processing budget.',
         name: video.name ?? undefined,
+        mediaKind: video.mediaKind ?? undefined,
         size: video.size ?? undefined,
         type: video.type ?? undefined,
         lastModified: video.lastModified ?? undefined,
@@ -66,7 +81,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
         warnings,
       }))
     }
-  }, [dispatch, settings, video.duration, video.lastModified, video.name, video.sessionId, video.size, video.status, video.type, video.warnings])
+  }, [dispatch, settings, video.duration, video.lastModified, video.mediaKind, video.name, video.sessionId, video.size, video.status, video.type, video.warnings])
 
   const revokeActiveObjectUrl = () => {
     const activeUrl = objectUrlRef.current
@@ -95,6 +110,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
     revokeActiveObjectUrl()
     revokeAudioObjectUrl()
     clearVideoFiles()
+    clearAudioData()
     resetInput()
     dispatch({ type: RESET_APP_STATE })
   }
@@ -112,7 +128,11 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
     }
 
     revokeAudioObjectUrl()
+    if (video.sessionId) {
+      clearAudioData()
+    }
     dispatch(clearAudio())
+    dispatch(clearContext())
     dispatch(setAudioExtracting({
       sessionId: video.sessionId,
       format: settings.audioFormat,
@@ -152,6 +172,12 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       const blob = new Blob([audioBytes.buffer], { type: result.mimeType })
       const objectUrl = URL.createObjectURL(blob)
       audioObjectUrlRef.current = objectUrl
+      registerAudioData(result.sessionId, {
+        bytes: result.bytes,
+        mimeType: result.mimeType,
+        sampleRate: result.sampleRate,
+        duration: video.duration,
+      })
 
       dispatch(setAudioReady({
         sessionId: result.sessionId,
@@ -178,20 +204,82 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
     }
   }
 
+  const handleTranscribe = async () => {
+    if (!video.sessionId || audio.status !== 'ready' || isTranscribing || !modelReady) return
+
+    const audioData = getAudioData(video.sessionId)
+    if (!audioData) {
+      dispatch(setTranscriptError('The extracted audio is no longer available in browser memory. Extract audio again and retry transcription.'))
+      return
+    }
+
+    dispatch(setTranscriptTranscribing())
+    dispatch(setProcessingStatus('transcribing'))
+    dispatch(setProcessingProgress(0))
+    dispatch(setProcessingError(''))
+
+    try {
+      const result = await workerClient.runTask<TranscribeResult>('TRANSCRIBE', {
+        sessionId: video.sessionId,
+        bytes: audioData.bytes,
+        mimeType: audioData.mimeType,
+        sampleRate: audioData.sampleRate,
+        duration: audioData.duration,
+        maxNewTokens: settings.transcriptMaxNewTokens,
+        chunkSeconds: settings.transcriptChunkSeconds,
+        overlapSeconds: settings.transcriptOverlapSeconds,
+      }, (progress) => {
+        dispatch(setTranscriptProgress(progress))
+        dispatch(setProcessingProgress(progress))
+      }, (log) => {
+        if (typeof log === 'string') {
+          dispatch(setTranscriptPhase(log))
+        }
+      }, (partial) => {
+        const partialResult = partial as TranscribePartialResult
+        if (partialResult.sessionId === video.sessionId) {
+          dispatch(appendTranscriptSegments({
+            segments: partialResult.segments,
+            rawText: partialResult.rawText,
+          }))
+        }
+      })
+
+      if (activeSessionRef.current !== result.sessionId) return
+
+      dispatch(setTranscriptResult({
+        segments: result.segments,
+        rawText: result.rawText,
+      }))
+      dispatch(setProcessingStatus('complete'))
+      dispatch(setProcessingProgress(100))
+      dispatch(setProcessingError(''))
+    } catch (err) {
+      if (activeSessionRef.current !== video.sessionId) return
+      const message = err instanceof Error ? err.message : 'Transcription failed.'
+      dispatch(setTranscriptError(message))
+      dispatch(setProcessingError(message))
+      dispatch(setProcessingStatus('idle'))
+    }
+  }
+
   const handleFiles = async (files: FileList | File[]) => {
     const file = Array.from(files)[0]
     if (!file) return
+    const mediaKind: MediaKind | null = isSupportedVideo(file) ? 'video' : isSupportedAudio(file) ? 'audio' : null
 
     revokeActiveObjectUrl()
     revokeAudioObjectUrl()
     clearVideoFiles()
+    clearAudioData()
     activeSessionRef.current = null
     dispatch({ type: RESET_APP_STATE })
 
-    if (!isSupportedVideo(file)) {
+    if (!mediaKind) {
       dispatch(setVideoError({
-        message: 'Unsupported video format. Use MP4, WebM, Ogg, or MOV.',
+        message: 'Unsupported file format. Use video files like MP4/WebM/MOV or audio files like MP3/WAV/M4A/FLAC/Ogg.',
         name: file.name,
+        mediaKind: null,
         size: file.size,
         type: file.type || getFileExtension(file.name).toUpperCase().replace('.', ''),
         lastModified: file.lastModified,
@@ -205,6 +293,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       dispatch(setVideoError({
         message: sizeRejection,
         name: file.name,
+        mediaKind,
         size: file.size,
         type: file.type || getFileExtension(file.name).toUpperCase().replace('.', ''),
         lastModified: file.lastModified,
@@ -219,6 +308,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
     objectUrlRef.current = fileUrl
 
     dispatch(setVideoLoading({
+      mediaKind,
       sessionId,
       fileUrl,
       name: file.name,
@@ -228,7 +318,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
     }))
 
     try {
-      const duration = await readVideoDuration(fileUrl)
+      const duration = mediaKind === 'video' ? await readVideoDuration(fileUrl) : await readAudioDuration(fileUrl)
       if (activeSessionRef.current !== sessionId) return
       const durationRejection = getDurationRejection(duration, settings)
       if (durationRejection) {
@@ -241,6 +331,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
         dispatch(setVideoError({
           message: durationRejection,
           name: file.name,
+          mediaKind,
           size: file.size,
           type: file.type || getFileExtension(file.name).toUpperCase().replace('.', ''),
           lastModified: file.lastModified,
@@ -248,7 +339,30 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
         return
       }
 
-      registerVideoFile(sessionId, file)
+      if (mediaKind === 'video') {
+        registerVideoFile(sessionId, file)
+      } else {
+        const audioUrl = URL.createObjectURL(file)
+        audioObjectUrlRef.current = audioUrl
+        const bytes = new Uint8Array(await file.arrayBuffer())
+        registerAudioData(sessionId, {
+          bytes,
+          mimeType: file.type || 'audio/*',
+          sampleRate: settings.audioSampleRate,
+          duration,
+        })
+        dispatch(setAudioReady({
+          sessionId,
+          objectUrl: audioUrl,
+          format: 'source',
+          sampleRate: settings.audioSampleRate,
+          channels: 1,
+          duration,
+          size: file.size,
+          fileName: file.name,
+          mimeType: file.type || 'audio/*',
+        }))
+      }
       dispatch(setVideoReady({
         sessionId,
         duration,
@@ -262,8 +376,11 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       }
       clearVideoFiles()
       dispatch(setVideoError({
-        message: 'This video could not be previewed in the browser. Try a different MP4, WebM, Ogg, or MOV file.',
+        message: mediaKind === 'video'
+          ? 'This video could not be previewed in the browser. Try a different MP4, WebM, Ogg, or MOV file.'
+          : 'This audio file could not be previewed in the browser. Try a different MP3, WAV, M4A, FLAC, or Ogg file.',
         name: file.name,
+        mediaKind,
         size: file.size,
         type: file.type || getFileExtension(file.name).toUpperCase().replace('.', ''),
         lastModified: file.lastModified,
@@ -293,10 +410,10 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
             <span className={`h-2 w-2 rounded-full ${isReady ? 'bg-green-500' : isLoading ? 'bg-yellow-400 animate-pulse' : video.status === 'error' ? 'bg-red-500' : 'bg-gray-500'}`} />
             <span className="text-sm font-semibold text-gray-200">Video</span>
           </div>
-          <p className="mt-1 text-xs text-gray-500">One active local file for transcript processing.</p>
+          <p className="mt-1 text-xs text-gray-500">One active local video or audio file for transcript processing.</p>
         </div>
         <span className="shrink-0 rounded-md border border-gray-700 bg-gray-950 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-          {isReady ? 'Ready to process' : isLoading ? 'Reading metadata' : video.status === 'error' ? 'Needs attention' : 'No video'}
+          {isReady ? 'Ready to process' : isLoading ? 'Reading metadata' : video.status === 'error' ? 'Needs attention' : 'No media'}
         </span>
       </div>
 
@@ -322,15 +439,15 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
                 <rect width="14" height="12" x="2" y="6" rx="2" ry="2" />
               </svg>
             </div>
-            <p className="text-xl font-bold tracking-tight text-gray-100">Select a video to begin</p>
+            <p className="text-xl font-bold tracking-tight text-gray-100">Select media to begin</p>
             <p className="mt-3 max-w-sm text-sm leading-6 text-gray-500">
-              Drop a short recording here or browse from your computer. The preview loads before any processing starts.
+              Drop a video or audio recording here, or browse from your computer. Metadata loads before any processing starts.
             </p>
             <div className="mt-6 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-950/30 transition-colors hover:bg-blue-500">
-              Choose Video
+              Choose File
             </div>
             <div className="mt-4 rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-500">
-              MP4, WebM, Ogg, MOV
+              MP4, WebM, MOV, MP3, WAV, M4A, FLAC, Ogg
             </div>
             <p className="mt-3 text-xs text-gray-600">
               Current budget: {settings.maxVideoSizeMb} MB / {settings.maxVideoDurationMinutes} min
@@ -358,17 +475,25 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
 
         {isReady && (
           <>
-            <video
-              src={video.fileUrl ?? undefined}
-              controls
-              className="aspect-video w-full rounded-xl border border-gray-800 bg-black object-contain"
-            />
+            {isAudioInput ? (
+              <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-5">
+                <p className="mb-3 text-sm font-semibold text-gray-100">Audio preview</p>
+                <audio src={video.fileUrl ?? undefined} controls className="w-full" />
+              </div>
+            ) : (
+              <video
+                src={video.fileUrl ?? undefined}
+                controls
+                className="aspect-video w-full rounded-xl border border-gray-800 bg-black object-contain"
+              />
+            )}
 
             <div className="grid gap-3 rounded-xl border border-gray-800 bg-gray-950/70 p-4 sm:grid-cols-2">
               <VideoMetadataItem label="File" value={video.name ?? 'Unknown'} wide />
               <VideoMetadataItem label="Size" value={formatFileSize(video.size)} />
               <VideoMetadataItem label="Duration" value={formatDuration(video.duration)} />
               <VideoMetadataItem label="Type" value={video.type || 'Unknown'} />
+              <VideoMetadataItem label="Input" value={isAudioInput ? 'Audio' : 'Video'} />
               <VideoMetadataItem label="Session" value={video.sessionId ?? 'Unknown'} />
             </div>
 
@@ -388,17 +513,26 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
                 <div>
                   <p className="text-sm font-semibold text-gray-100">Transcription audio</p>
                   <p className="mt-1 text-xs leading-5 text-gray-500">
-                    Output: mono {settings.audioFormat.toUpperCase()} at {formatAudioSampleRate(settings.audioSampleRate)}.
+                    {isAudioInput
+                      ? 'Uploaded audio is ready for transcription.'
+                      : `Output: mono ${settings.audioFormat.toUpperCase()} at ${formatAudioSampleRate(settings.audioSampleRate)}.`}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void handleExtractAudio()}
-                  disabled={isExtractingAudio}
-                  className="shrink-0 rounded-lg border border-blue-500/50 bg-blue-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800 disabled:text-gray-500"
-                >
-                  {audio.status === 'ready' ? 'Extract Again' : isExtractingAudio ? 'Extracting...' : 'Extract Audio'}
-                </button>
+                {isVideoInput && (
+                  <button
+                    type="button"
+                    onClick={() => void handleExtractAudio()}
+                    disabled={isExtractingAudio}
+                    className="shrink-0 rounded-lg border border-blue-500/50 bg-blue-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800 disabled:text-gray-500"
+                  >
+                    {audio.status === 'ready' ? 'Extract Again' : isExtractingAudio ? 'Extracting...' : 'Extract Audio'}
+                  </button>
+                )}
+                {isAudioInput && audio.status === 'ready' && (
+                  <span className="shrink-0 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wide text-green-200">
+                    Audio Ready
+                  </span>
+                )}
               </div>
 
               {isExtractingAudio && (
@@ -422,16 +556,70 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
 
               {audio.status === 'ready' && audio.objectUrl && (
                 <div className="mt-4 space-y-3">
-                  <audio src={audio.objectUrl} controls className="w-full" />
+                  {isVideoInput && <audio src={audio.objectUrl} controls className="w-full" />}
                   <div className="grid gap-3 sm:grid-cols-2">
                     <VideoMetadataItem label="Audio file" value={audio.fileName ?? 'Unknown'} />
                     <VideoMetadataItem label="Audio size" value={formatFileSize(audio.size)} />
-                    <VideoMetadataItem label="Format" value={(audio.format ?? settings.audioFormat).toUpperCase()} />
+                    <VideoMetadataItem label="Format" value={audio.format === 'source' ? audio.mimeType ?? 'Source audio' : (audio.format ?? settings.audioFormat).toUpperCase()} />
                     <VideoMetadataItem label="Sample rate" value={formatAudioSampleRate(audio.sampleRate ?? settings.audioSampleRate)} />
                   </div>
                 </div>
               )}
             </div>
+
+            {audio.status === 'ready' && (
+              <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-100">Transcript</p>
+                    <p className="mt-1 text-xs leading-5 text-gray-500">
+                      Gemma transcription in fixed {Math.min(settings.transcriptChunkSeconds, 30)}s chunks with {settings.transcriptOverlapSeconds}s overlap. Output: {settings.transcriptMaxNewTokens === 'unlimited' ? 'unlimited per chunk' : `${settings.transcriptMaxNewTokens} tokens per chunk`}.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleTranscribe()}
+                    disabled={isTranscribing || !modelReady}
+                    className="shrink-0 rounded-lg border border-blue-500/50 bg-blue-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800 disabled:text-gray-500"
+                    title={modelReady ? 'Transcribe extracted audio' : 'Load Gemma before transcribing'}
+                  >
+                    {isTranscribing ? 'Transcribing...' : transcript.transcriptStatus === 'ready' ? 'Transcribe Again' : modelReady ? 'Transcribe' : 'Load Gemma First'}
+                  </button>
+                </div>
+
+                {isTranscribing && (
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-800">
+                        <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${transcript.transcriptProgress}%` }} />
+                      </div>
+                      <span className="w-10 text-right font-mono text-xs text-gray-400">{transcript.transcriptProgress}%</span>
+                    </div>
+                    <p className="text-xs text-gray-500">{transcript.transcriptPhase ?? 'Transcribing fixed audio chunks'}</p>
+                  </div>
+                )}
+
+                {transcript.transcriptStatus === 'error' && (
+                  <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
+                    <p className="text-sm font-semibold text-red-100">Transcription failed</p>
+                    <p className="mt-1 text-sm leading-6 text-red-200/80">{transcript.transcriptError}</p>
+                  </div>
+                )}
+
+                {transcript.transcriptSegments.length > 0 && (
+                  <div className="mt-4 max-h-72 space-y-3 overflow-y-auto pr-1">
+                    {transcript.transcriptSegments.map((segment) => (
+                      <div key={segment.id} className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
+                        <div className="font-mono text-[11px] text-blue-300">
+                          {formatDuration(segment.startTime)} - {formatDuration(segment.endTime)}
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-gray-200">{segment.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -442,7 +630,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
               onClick={() => inputRef.current?.click()}
               className="flex-1 rounded-xl border border-blue-500/50 bg-blue-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-blue-500"
             >
-              Replace Video
+              Replace File
             </button>
             <button
               type="button"
