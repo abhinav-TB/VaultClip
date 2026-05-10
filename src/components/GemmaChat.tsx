@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAppSelector } from '../store/hooks'
 import { useWorker } from '../store/hooks/useWorker'
-import { GenerationSettings } from '../types/generation'
+import type { GenerationSettings } from '../types/generation'
 import { getLoadingMessage, getPhaseProgressLabel, getSourceLabel, getStageLabel } from '../lib/modelRuntime'
 import { RuntimeDetail } from './RuntimeDetail'
 

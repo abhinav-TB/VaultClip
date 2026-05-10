@@ -1,5 +1,13 @@
-import { TranscriptSegment } from './types'
+import type { TranscriptSegment } from './types'
 
+/**
+ * Converts raw Gemma output into transcript text suitable for product state.
+ *
+ * Gemma can echo chat-role labels, the transcription prompt, or markdown.
+ *
+ * @param text - Raw decoded model output.
+ * @returns Clean transcript text, or an empty string when no usable speech remains.
+ */
 export function normalizeTranscriptText(text: string) {
   return text
     .replace(/```[\s\S]*?```/g, (block) => block.replace(/```[a-z]*|```/gi, ''))
@@ -19,19 +27,41 @@ export function normalizeTranscriptText(text: string) {
     .trim()
 }
 
+/**
+ * Estimates generated token count from text for truncation detection.
+ *
+ * @param text - Cleaned transcript text.
+ * @returns Approximate token count.
+ */
 export function estimateTokenCount(text: string) {
   if (!text) return 0
   return Math.ceil(text.split(/\s+/).length * 1.35)
 }
 
+/**
+ * Detects likely cut-off transcript output so the caller can retry smaller chunks.
+ *
+ * @param text - Cleaned transcript text.
+ * @returns True when the text is empty or appears incomplete.
+ */
 export function looksTruncated(text: string) {
+  // Heuristic only: if a longer response ends on a clause separator, retry the
+  // chunk with a smaller audio range.
   if (!text) return true
   if (/[.!?]"?$/.test(text)) return false
   const words = text.split(/\s+/)
   return words.length > 20 && /[,;:]$/.test(text)
 }
 
+/**
+ * Removes exact repeated word overlap between adjacent transcript segments.
+ *
+ * @param segments - Ordered transcript segments, usually from overlapped chunks.
+ * @returns New segment list with duplicated overlap trimmed.
+ */
 export function removeBoundaryDuplicates(segments: TranscriptSegment[]) {
+  // Overlapped chunks may repeat the last few words of the previous segment.
+  // Trim only exact word overlap so we do not rewrite the transcript content.
   const deduped: TranscriptSegment[] = []
 
   for (const segment of segments) {

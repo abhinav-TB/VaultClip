@@ -1,8 +1,10 @@
-import { AudioChunk, buildFixedTranscriptChunks } from './audioChunking'
+import type { AudioChunk} from './audioChunking';
+import { buildFixedTranscriptChunks } from './audioChunking'
 import { deleteFFmpegFile, getFFmpeg } from './ffmpegRuntime'
-import { GeneratorModelLike, getGenerator, ProcessorLike, TokenizerLike } from './gemmaRuntime'
+import type { GeneratorModelLike, ProcessorLike, TokenizerLike } from './gemmaRuntime';
+import { getGenerator } from './gemmaRuntime'
 import { estimateTokenCount, looksTruncated, normalizeTranscriptText, removeBoundaryDuplicates } from './transcriptNormalize'
-import { TranscribePayload, TranscriptSegment, WorkerRequest } from './types'
+import type { TranscribePayload, TranscriptSegment, WorkerRequest } from './types'
 import { sendResponse } from './workerMessages'
 
 const DEFAULT_TRANSCRIPTION_MAX_NEW_TOKENS = 512
@@ -10,6 +12,14 @@ const UNLIMITED_TRANSCRIPTION_MAX_NEW_TOKENS = 4096
 const DEFAULT_TRANSCRIPTION_CHUNK_SECONDS = 30
 const DEFAULT_TRANSCRIPTION_OVERLAP_SECONDS = 0.1
 
+/**
+ * Runs manual Gemma transcription for extracted or uploaded audio.
+ *
+ * This path intentionally ignores the chat generation limit and uses
+ * transcript-specific chunk/token settings.
+ *
+ * @param payload - Audio bytes, media metadata, and transcript settings.
+ */
 export async function handleTranscribe(payload: TranscribePayload) {
   const taskType = 'TRANSCRIBE'
 
@@ -39,6 +49,8 @@ export async function handleTranscribe(payload: TranscribePayload) {
     const rawOutputs: string[] = []
     const segments: TranscriptSegment[] = []
 
+    // Emit each chunk as soon as it is usable so the UI can show progressive
+    // transcript results instead of waiting for the full recording.
     for (let index = 0; index < chunks.length; index += 1) {
       const chunk = chunks[index]
       sendResponse({
@@ -109,6 +121,8 @@ export async function handleTranscribe(payload: TranscribePayload) {
 }
 
 async function decodeAudioToFloat32(payload: TranscribePayload, taskType: WorkerRequest['type'], sampleRate: number) {
+  // Normalize every accepted audio format into raw mono f32 samples. That gives
+  // Gemma a consistent input shape regardless of uploaded/extracted format.
   const activeFFmpeg = await getFFmpeg(taskType)
   const inputName = `transcribe-input-${payload.sessionId}${getAudioExtension(payload.mimeType)}`
   const outputName = `transcribe-f32-${payload.sessionId}.f32`
@@ -165,6 +179,8 @@ async function transcribeChunkWithRetry(args: TranscribeChunkArgs): Promise<Tran
     return result.segment ? [result.segment] : []
   }
 
+  // If Gemma returns empty or likely truncated text, split the time range once.
+  // This preserves coverage while giving the model a shorter audio input.
   const midpoint = args.chunk.startTime + (args.chunk.endTime - args.chunk.startTime) / 2
   const subchunks = [
     { startTime: args.chunk.startTime, endTime: Math.min(args.chunk.endTime, midpoint + args.overlapSeconds) },
@@ -207,6 +223,8 @@ async function transcribeSingleChunk(args: TranscribeChunkArgs, chunk: AudioChun
     do_sample: false,
   })
 
+  // Decode and clean model output before it reaches Redux. Raw text is still
+  // retained separately for debugging prompt echoes or model artifacts.
   const decoded = args.tokenizer.decode(outputTokens[0], { skip_special_tokens: true })
   const text = normalizeTranscriptText(decoded)
   const hitTokenCap = estimateTokenCount(text) >= args.maxNewTokens * 0.92
@@ -229,6 +247,8 @@ async function transcribeSingleChunk(args: TranscribeChunkArgs, chunk: AudioChun
 }
 
 function buildTranscriptionPrompt(processor: ProcessorLike) {
+  // Keep this prompt narrow. The timestamps come from chunk boundaries, not
+  // model guesses, so the model should return only spoken words.
   const audioToken = processor.audio_token ?? '<audio_soft_token>'
   return [
     audioToken,
@@ -251,12 +271,16 @@ function getProcessorSampleRate(processor: ProcessorLike) {
 }
 
 function getTranscriptMaxNewTokens(value: TranscribePayload['maxNewTokens']) {
+  // "Unlimited" still needs a hard cap because browser inference requires a
+  // bounded generation request.
   if (value === 'unlimited') return UNLIMITED_TRANSCRIPTION_MAX_NEW_TOKENS
   if (value === 1024 || value === 2048 || value === 512) return value
   return DEFAULT_TRANSCRIPTION_MAX_NEW_TOKENS
 }
 
 function getTranscriptChunkSeconds(value: number) {
+  // Clamp to 30s because longer chunks currently lose transcript coverage with
+  // this Gemma audio path.
   if (!Number.isFinite(value)) return DEFAULT_TRANSCRIPTION_CHUNK_SECONDS
   return Math.max(10, Math.min(30, Math.round(value)))
 }

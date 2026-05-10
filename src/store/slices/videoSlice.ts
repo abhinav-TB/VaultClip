@@ -1,8 +1,15 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit'
+import type { PayloadAction } from '@reduxjs/toolkit';
+import { createSlice } from '@reduxjs/toolkit'
 
 export type VideoStatus = 'idle' | 'loading-metadata' | 'ready' | 'error'
 export type MediaKind = 'video' | 'audio'
 
+/**
+ * Serializable state for the single active media session.
+ *
+ * File and Blob objects intentionally live in registries/object URLs outside
+ * Redux; this slice stores only metadata needed by UI and downstream guards.
+ */
 interface VideoState {
   mediaKind: MediaKind | null
   sessionId: string | null

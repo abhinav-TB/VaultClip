@@ -1,5 +1,5 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg'
-import { WorkerRequest } from './types'
+import type { WorkerRequest } from './types'
 import { sendResponse } from './workerMessages'
 import ffmpegClassWorkerURL from '../../node_modules/@ffmpeg/ffmpeg/dist/esm/worker.js?url'
 import ffmpegCoreURL from '../../node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js?url'
@@ -7,6 +7,15 @@ import ffmpegWasmURL from '../../node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.
 
 let ffmpeg: FFmpeg | null = null
 
+/**
+ * Loads and returns the shared ffmpeg.wasm instance for worker media tasks.
+ *
+ * ffmpeg.wasm is expensive to initialize, so extraction and transcription
+ * decode tasks reuse one instance inside this worker.
+ *
+ * @param taskType - Worker task that should receive ffmpeg loading progress.
+ * @returns The loaded shared ffmpeg instance.
+ */
 export async function getFFmpeg(taskType: WorkerRequest['type']) {
   if (ffmpeg?.loaded) return ffmpeg
 
@@ -37,6 +46,12 @@ export async function getFFmpeg(taskType: WorkerRequest['type']) {
   return ffmpeg
 }
 
+/**
+ * Deletes a path from ffmpeg's virtual filesystem, ignoring missing files.
+ *
+ * @param activeFFmpeg - Loaded ffmpeg instance that owns the virtual filesystem.
+ * @param path - Virtual filesystem path to remove.
+ */
 export async function deleteFFmpegFile(activeFFmpeg: FFmpeg, path: string) {
   try {
     await activeFFmpeg.deleteFile(path)

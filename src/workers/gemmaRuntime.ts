@@ -1,5 +1,6 @@
-import { AutoProcessor, env, Gemma4ForConditionalGeneration, RawImage } from '@huggingface/transformers'
-import { ModelLoadEvent, ModelLoadSource, WorkerRequest } from './types'
+import type { RawImage } from '@huggingface/transformers';
+import { AutoProcessor, env, Gemma4ForConditionalGeneration } from '@huggingface/transformers'
+import type { ModelLoadEvent, ModelLoadSource, WorkerRequest } from './types'
 import { sendModelLoadEvent, sendResponse } from './workerMessages'
 
 env.allowLocalModels = false
@@ -8,19 +9,23 @@ const GEMMA_MODEL_ID = 'onnx-community/gemma-4-E2B-it-ONNX'
 const GEMMA_REVISION = 'main'
 const MODEL_FILE_SOURCE = new Map<string, ModelLoadSource>()
 
+/** Message shape accepted by Gemma chat template processing. */
 export type MessageContent =
   | string
   | Array<{ type: 'image'; url: string } | { type: 'text'; text: string }>
 
+/** Minimal chat message contract used by Gemma worker tasks. */
 export interface ChatMessage {
   role: 'user'
   content: MessageContent
 }
 
+/** Tokenizer surface used by chat and transcription decoding. */
 export interface TokenizerLike {
   decode: (tokens: unknown, options: { skip_special_tokens: boolean }) => string
 }
 
+/** Processor surface used for chat templates and multimodal tensor creation. */
 export interface ProcessorLike {
   tokenizer?: TokenizerLike
   audio_token?: string
@@ -35,6 +40,7 @@ export interface ProcessorLike {
   ): Promise<Record<string, unknown>>
 }
 
+/** Generation model surface used by this worker. */
 export interface GeneratorModelLike {
   generate: (inputs: Record<string, unknown>) => Promise<unknown[]>
 }
@@ -42,6 +48,16 @@ export interface GeneratorModelLike {
 let gProcessor: ProcessorLike | null = null
 let gModel: GeneratorModelLike | null = null
 
+/**
+ * Loads Gemma on first use and returns the cached processor/model pair.
+ *
+ * Later chat and transcription calls reuse these objects from worker memory
+ * instead of re-downloading or reinitializing the model.
+ *
+ * @param taskType - Worker task that should receive loading progress events.
+ * @returns The loaded Gemma processor and generation model.
+ * @throws If WebGPU is unavailable or Gemma cannot be loaded.
+ */
 export async function getGenerator(taskType: WorkerRequest['type'] = 'CHALLENGE_RESPONSE') {
   if (!('gpu' in navigator)) {
     throw new Error('WebGPU is not supported in this browser. Please use Chrome/Edge and ensure hardware acceleration is enabled.')
@@ -126,6 +142,12 @@ export async function getGenerator(taskType: WorkerRequest['type'] = 'CHALLENGE_
   return { processor: gProcessor, model: gModel }
 }
 
+/**
+ * Handles the explicit model preload request from the main thread.
+ *
+ * Posts worker progress, success, or error messages instead of returning model
+ * objects to the caller.
+ */
 export async function handleInitModels() {
   try {
     await getGenerator('INIT_MODELS')
@@ -151,7 +173,16 @@ export async function handleInitModels() {
   }
 }
 
+/**
+ * Returns Chrome JS heap usage for debug metadata when available.
+ *
+ * This is not total system RAM and does not include GPU memory.
+ *
+ * @returns Formatted heap usage values, or `"Not supported"` outside Chrome.
+ */
 export function getMemoryUsage() {
+  // Chrome exposes JS heap information here. It is not total system RAM and it
+  // does not include GPU memory, so callers should treat it as debug-only.
   const memory = (performance as Performance & {
     memory?: {
       usedJSHeapSize: number
@@ -184,6 +215,8 @@ function describeModelProgress(taskType: WorkerRequest['type'], progress: unknow
   const file = progressInfo.file
 
   if (progressInfo.status === 'download' && file) {
+    // Transformers.js uses the same callback status for cached and network
+    // loads, so we check Cache Storage ourselves to show the user the source.
     sendModelLoadEvent(taskType, {
       stage: 'checking-cache',
       source: 'unknown',

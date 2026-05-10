@@ -1,9 +1,16 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit'
+import type { PayloadAction } from '@reduxjs/toolkit';
+import { createSlice } from '@reduxjs/toolkit'
 
 export type AudioStatus = 'idle' | 'extracting' | 'ready' | 'error'
 export type AudioFormat = 'wav' | 'flac' | 'source'
 export type AudioSampleRate = 16000 | 24000 | 48000
 
+/**
+ * Serializable state for transcription-ready audio.
+ *
+ * Raw bytes stay in the audio data registry; Redux stores status, metadata, and
+ * the preview object URL.
+ */
 interface AudioState {
   status: AudioStatus
   progress: number

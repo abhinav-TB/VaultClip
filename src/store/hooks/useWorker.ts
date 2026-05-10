@@ -7,7 +7,7 @@ import {
   setProcessingError,
 } from '../slices/processingSlice'
 import { setError, setLoadDetails, setProgress, setStatus } from '../slices/modelSlice'
-import { ModelLoadEvent, WorkerTaskType } from '../../workers/types'
+import type { ModelLoadEvent, WorkerTaskType } from '../../workers/types'
 
 /**
  * useWorker provides a clean way for UI components to trigger

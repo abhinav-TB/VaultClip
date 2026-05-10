@@ -1,18 +1,16 @@
-import { WorkerRequest, WorkerResponse, WorkerTaskType } from '../workers/types'
+import type { WorkerRequest, WorkerResponse, WorkerTaskType } from '../workers/types'
 
 /**
- * WorkerClient handles the low-level lifecycle of the Pipeline Worker.
- * It provides a Promise-based API for components and manages cancellation.
+ * Promise-based facade over the pipeline worker.
+ *
+ * Components use this client instead of attaching worker listeners directly.
  */
 class WorkerClient {
   private worker: Worker | null = null
 
-  /**
-   * Initializes or returns the existing worker instance
-   */
+  /** Returns the existing worker instance, creating it on first use. */
   private getWorker(): Worker {
     if (!this.worker) {
-      // Use Vite's worker constructor
       this.worker = new Worker(new URL('../workers/pipeline.worker.ts', import.meta.url), {
         type: 'module',
       })
@@ -21,8 +19,14 @@ class WorkerClient {
   }
 
   /**
-   * Executes a task in the background.
-   * Returns a promise that resolves on SUCCESS or rejects on ERROR.
+   * Executes one background task and resolves when the worker posts SUCCESS.
+   *
+   * @param type - Worker task type to execute.
+   * @param payload - Serializable task payload, except File objects explicitly passed to workers.
+   * @param onProgress - Optional progress callback for PROGRESS messages.
+   * @param onLog - Optional callback for LOG messages.
+   * @param onPartial - Optional callback for PARTIAL messages.
+   * @returns Worker SUCCESS payload typed by the caller.
    */
   public runTask<T = unknown>(
     type: WorkerTaskType,
@@ -34,11 +38,9 @@ class WorkerClient {
     const worker = this.getWorker()
 
     return new Promise((resolve, reject) => {
-      // Internal listener specifically for this task instance
       const handleMessage = (event: MessageEvent<WorkerResponse>) => {
         const response = event.data
 
-        // Verify this message belongs to our current task type
         if (response.taskType !== type) return
 
         switch (response.type) {
@@ -46,7 +48,7 @@ class WorkerClient {
             if (onLog && response.data) {
               onLog(response.data)
             }
-            break;
+            break
           case 'PROGRESS':
             if (onProgress && response.progress !== undefined) {
               onProgress(response.progress)
@@ -73,15 +75,15 @@ class WorkerClient {
 
       worker.addEventListener('message', handleMessage)
 
-      // Send the actual request
       const request: WorkerRequest = { type, payload }
       worker.postMessage(request)
     })
   }
 
   /**
-   * Hard cancellation of all background work.
-   * Kills the thread and cleans up the instance.
+   * Cancels all background work by terminating the worker.
+   *
+   * The next task creates a fresh worker with empty in-worker model/ffmpeg state.
    */
   public cancelAll() {
     if (this.worker) {
@@ -91,5 +93,5 @@ class WorkerClient {
   }
 }
 
-// Export as a singleton
+/** Shared worker client instance used by UI flows. */
 export const workerClient = new WorkerClient()

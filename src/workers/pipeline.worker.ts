@@ -2,9 +2,11 @@ import { handleExtractAudio } from './audioExtractionTask'
 import { handleChat } from './chatTask'
 import { handleInitModels } from './gemmaRuntime'
 import { handleTranscribe } from './transcriptionTask'
-import { ChatPayload, ExtractAudioPayload, TranscribePayload, WorkerRequest } from './types'
+import type { ChatPayload, ExtractAudioPayload, TranscribePayload, WorkerRequest } from './types'
 import { sendResponse } from './workerMessages'
 
+// Single worker entrypoint. Keep this file as a thin router so model, ffmpeg,
+// chat, and transcription code can be reviewed independently.
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const { type, payload } = event.data
 

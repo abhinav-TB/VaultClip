@@ -1,4 +1,5 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit'
+import type { PayloadAction } from '@reduxjs/toolkit';
+import { createSlice } from '@reduxjs/toolkit'
 
 export interface FrameSummary {
   timestamp: number
@@ -7,6 +8,7 @@ export interface FrameSummary {
 
 export type TranscriptStatus = 'idle' | 'transcribing' | 'ready' | 'error'
 
+/** Timestamped transcript segment generated from one Gemma audio chunk. */
 export interface TranscriptSegment {
   id: string
   index: number
@@ -16,6 +18,7 @@ export interface TranscriptSegment {
   source: 'gemma-audio-chunk'
 }
 
+/** Transcript and future visual context generated from the active media. */
 interface ContextState {
   transcriptStatus: TranscriptStatus
   transcriptProgress: number

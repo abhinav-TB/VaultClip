@@ -1,4 +1,4 @@
-import { GenerationSettings } from '../types/generation'
+import type { GenerationSettings } from '../types/generation'
 import { clampTokenLimit, clampTranscriptChunkSeconds, clampTranscriptOverlapSeconds, clampVideoDurationLimit, clampVideoSizeLimit, formatAudioSampleRate } from '../lib/format'
 
 const AUDIO_SAMPLE_RATES = [16000, 24000, 48000] as const

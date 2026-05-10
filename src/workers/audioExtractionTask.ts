@@ -1,8 +1,16 @@
 import { fetchFile } from '@ffmpeg/util'
-import { ExtractAudioPayload } from './types'
+import type { ExtractAudioPayload } from './types'
 import { deleteFFmpegFile, getFFmpeg } from './ffmpegRuntime'
 import { sendResponse } from './workerMessages'
 
+/**
+ * Converts accepted video input into a transcription-ready mono audio artifact.
+ *
+ * The bytes are returned to the main thread; temporary ffmpeg FS files are not
+ * persisted after this task completes.
+ *
+ * @param payload - Video session, source file, and requested audio settings.
+ */
 export async function handleExtractAudio(payload: ExtractAudioPayload) {
   const taskType = 'EXTRACT_AUDIO'
   const inputName = `input-${payload.sessionId}${getSafeExtension(payload.inputName) || '.video'}`
@@ -33,6 +41,8 @@ export async function handleExtractAudio(payload: ExtractAudioPayload) {
     activeFFmpeg.on('progress', progressHandler)
     await activeFFmpeg.writeFile(inputName, await fetchFile(payload.file))
 
+    // Keep the output conservative for transcription: no video stream, mono
+    // channel layout, and user-selected sample rate/format.
     const codecArgs = payload.outputFormat === 'wav'
       ? ['-c:a', 'pcm_s16le']
       : ['-c:a', 'flac']
@@ -96,12 +106,16 @@ export async function handleExtractAudio(payload: ExtractAudioPayload) {
     if (progressHandler) {
       activeFFmpeg.off('progress', progressHandler)
     }
+    // ffmpeg.wasm has an in-memory virtual filesystem. Clean both paths even
+    // after failures so retries do not reuse stale artifacts.
     await deleteFFmpegFile(activeFFmpeg, inputName)
     await deleteFFmpegFile(activeFFmpeg, outputName)
   }
 }
 
 function getSafeExtension(fileName: string) {
+  // The extension is used only for ffmpeg input naming. Strip unexpected
+  // characters to avoid odd virtual filesystem paths.
   const index = fileName.lastIndexOf('.')
   if (index < 0) return ''
   const extension = fileName.slice(index).toLowerCase().replace(/[^a-z0-9.]/g, '')

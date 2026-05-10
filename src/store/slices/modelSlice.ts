@@ -1,5 +1,6 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit'
-import { ModelLoadSource, ModelLoadStage } from '../../workers/types'
+import type { PayloadAction } from '@reduxjs/toolkit';
+import { createSlice } from '@reduxjs/toolkit'
+import type { ModelLoadSource, ModelLoadStage } from '../../workers/types'
 
 export type ModelStatus = 'idle' | 'loading' | 'ready' | 'error'
 

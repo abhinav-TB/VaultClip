@@ -5,7 +5,7 @@ import { ModelRuntimeStatus } from './components/ModelRuntimeStatus'
 import { SettingsModal } from './components/SettingsModal'
 import { VideoUploadPanel } from './components/VideoUploadPanel'
 import { WorkflowStep } from './components/WorkflowStep'
-import { GenerationSettings } from './types/generation'
+import type { GenerationSettings } from './types/generation'
 
 function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)

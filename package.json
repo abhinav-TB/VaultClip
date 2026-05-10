@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "check:standards": "node scripts/check-code-standards.mjs",
+    "check": "npm run lint && npm run check:standards && npm run build",
     "preview": "vite preview",
     "format": "prettier --write ."
   },
@@ -33,6 +35,7 @@
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.9",
+    "eslint-plugin-tsdoc": "^0.5.2",
     "globals": "^15.9.0",
     "postcss": "^8.4.41",
     "prettier": "^3.3.3",

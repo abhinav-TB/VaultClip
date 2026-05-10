@@ -1,4 +1,5 @@
-import { configureStore, combineReducers, Action } from '@reduxjs/toolkit'
+import type { Action } from '@reduxjs/toolkit';
+import { configureStore, combineReducers } from '@reduxjs/toolkit'
 import modelReducer from './slices/modelSlice'
 import videoReducer from './slices/videoSlice'
 import processingReducer from './slices/processingSlice'

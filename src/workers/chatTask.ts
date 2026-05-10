@@ -1,6 +1,7 @@
 import { RawImage, TextStreamer } from '@huggingface/transformers'
-import { ChatPayload } from './types'
-import { ChatMessage, getGenerator, getMemoryUsage, MessageContent, TokenizerLike } from './gemmaRuntime'
+import type { ChatPayload } from './types'
+import type { ChatMessage, MessageContent, TokenizerLike } from './gemmaRuntime';
+import { getGenerator, getMemoryUsage } from './gemmaRuntime'
 import { sendResponse } from './workerMessages'
 
 interface ChatMetrics {
@@ -14,6 +15,13 @@ interface ChatResponse {
   metrics: ChatMetrics
 }
 
+/**
+ * Runs the general chat path for prompts plus optional image/text attachments.
+ *
+ * Audio transcription uses a separate deterministic path in transcriptionTask.ts.
+ *
+ * @param payload - Chat prompt, optional attachments, and chat token budget.
+ */
 export async function handleChat(payload: ChatPayload) {
   try {
     const { processor, model } = await getGenerator()
@@ -27,6 +35,8 @@ export async function handleChat(payload: ChatPayload) {
     let finalPrompt = payload.prompt
     const multimodalContent: Exclude<MessageContent, string> = []
 
+    // Text files are inlined into the prompt; images are passed as separate
+    // multimodal inputs so the processor can build the correct tensors.
     if (payload.attachments && payload.attachments.length > 0) {
       for (const att of payload.attachments) {
         if (att.type === 'text') {
@@ -78,6 +88,8 @@ export async function handleChat(payload: ChatPayload) {
     const t0 = performance.now()
     const maxNewTokens = Math.max(32, Math.min(1024, Math.round(payload.maxNewTokens ?? 128)))
 
+    // Chat remains sampled for conversational responses. Transcription uses
+    // deterministic generation and its own token budget.
     const outputTokens = await model.generate({
       ...inputs,
       max_new_tokens: maxNewTokens,
