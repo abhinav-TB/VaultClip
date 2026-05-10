@@ -88,6 +88,7 @@ export interface TranscribeResult {
   sessionId: string
   segments: TranscriptSegment[]
   rawText: string
+  warnings: string[]
 }
 
 export interface TranscribePartialResult {

@@ -24,6 +24,7 @@ interface ContextState {
   transcriptProgress: number
   transcriptPhase: string | null
   transcriptError: string | null
+  transcriptWarnings: string[]
   transcript: string
   transcriptRawText: string
   transcriptSegments: TranscriptSegment[]
@@ -35,6 +36,7 @@ const initialState: ContextState = {
   transcriptProgress: 0,
   transcriptPhase: null,
   transcriptError: null,
+  transcriptWarnings: [],
   transcript: '',
   transcriptRawText: '',
   transcriptSegments: [],
@@ -53,6 +55,7 @@ export const contextSlice = createSlice({
       state.transcriptProgress = 0
       state.transcriptPhase = 'Preparing transcription'
       state.transcriptError = null
+      state.transcriptWarnings = []
       state.transcript = ''
       state.transcriptRawText = ''
       state.transcriptSegments = []
@@ -63,11 +66,12 @@ export const contextSlice = createSlice({
     setTranscriptPhase: (state, action: PayloadAction<string>) => {
       state.transcriptPhase = action.payload
     },
-    setTranscriptResult: (state, action: PayloadAction<{ segments: TranscriptSegment[]; rawText: string }>) => {
+    setTranscriptResult: (state, action: PayloadAction<{ segments: TranscriptSegment[]; rawText: string; warnings?: string[] }>) => {
       state.transcriptStatus = 'ready'
       state.transcriptProgress = 100
       state.transcriptPhase = 'Transcript ready'
       state.transcriptError = null
+      state.transcriptWarnings = action.payload.warnings ?? []
       state.transcriptSegments = action.payload.segments
       state.transcriptRawText = action.payload.rawText
       state.transcript = action.payload.segments.map((segment) => segment.text).join(' ')
@@ -85,6 +89,7 @@ export const contextSlice = createSlice({
       state.transcriptProgress = 0
       state.transcriptPhase = null
       state.transcriptError = action.payload
+      state.transcriptWarnings = []
     },
     appendTranscriptSegment: (state, action: PayloadAction<string>) => {
       state.transcript += (state.transcript ? ' ' : '') + action.payload

@@ -262,6 +262,7 @@ interface TranscriptSectionProps {
   progress: number
   phase: string | null
   error: string | null
+  warnings: string[]
   segments: TranscriptSegment[]
   settings: GenerationSettings
   modelReady: boolean
@@ -275,6 +276,7 @@ export const TranscriptSection = ({
   progress,
   phase,
   error,
+  warnings,
   segments,
   settings,
   modelReady,
@@ -308,6 +310,17 @@ export const TranscriptSection = ({
       <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
         <p className="text-sm font-semibold text-red-100">Transcription failed</p>
         <p className="mt-1 text-sm leading-6 text-red-200/80">{error}</p>
+      </div>
+    )}
+
+    {warnings.length > 0 && (
+      <div className="mt-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
+        <p className="text-sm font-semibold text-yellow-100">Transcript completed with notes</p>
+        <ul className="mt-1 space-y-1 text-sm leading-6 text-yellow-100/80">
+          {warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
       </div>
     )}
 

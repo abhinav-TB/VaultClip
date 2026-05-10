@@ -11,6 +11,7 @@ const DEFAULT_TRANSCRIPTION_MAX_NEW_TOKENS = 512
 const UNLIMITED_TRANSCRIPTION_MAX_NEW_TOKENS = 4096
 const DEFAULT_TRANSCRIPTION_CHUNK_SECONDS = 30
 const DEFAULT_TRANSCRIPTION_OVERLAP_SECONDS = 0.1
+const OPTIONAL_TAIL_CHUNK_SECONDS = 5
 
 /**
  * Runs manual Gemma transcription for extracted or uploaded audio.
@@ -48,6 +49,7 @@ export async function handleTranscribe(payload: TranscribePayload) {
 
     const rawOutputs: string[] = []
     const segments: TranscriptSegment[] = []
+    const warnings: string[] = []
 
     // Emit each chunk as soon as it is usable so the UI can show progressive
     // transcript results instead of waiting for the full recording.
@@ -59,19 +61,27 @@ export async function handleTranscribe(payload: TranscribePayload) {
         data: `Transcribing chunk ${index + 1} of ${chunks.length}`,
       })
 
-      const chunkSegments = await transcribeChunkWithRetry({
-        processor,
-        model,
-        tokenizer: (processor.tokenizer || processor) as unknown as TokenizerLike,
-        audio,
-        sampleRate: transcriptionSampleRate,
-        sessionId: payload.sessionId,
-        maxNewTokens: getTranscriptMaxNewTokens(payload.maxNewTokens),
-        overlapSeconds,
-        chunk,
-        baseIndex: segments.length,
-        rawOutputs,
-      })
+      let chunkSegments: TranscriptSegment[] = []
+      try {
+        chunkSegments = await transcribeChunkWithRetry({
+          processor,
+          model,
+          tokenizer: (processor.tokenizer || processor) as unknown as TokenizerLike,
+          audio,
+          sampleRate: transcriptionSampleRate,
+          sessionId: payload.sessionId,
+          maxNewTokens: getTranscriptMaxNewTokens(payload.maxNewTokens),
+          overlapSeconds,
+          chunk,
+          baseIndex: segments.length,
+          rawOutputs,
+        })
+      } catch (err) {
+        if (!isOptionalTailChunk(chunk, chunks, index) || segments.length === 0) {
+          throw err
+        }
+        warnings.push(err instanceof Error ? err.message : `Skipped ${formatTimestamp(chunk.startTime)}-${formatTimestamp(chunk.endTime)} because Gemma did not return usable text.`)
+      }
 
       segments.push(...chunkSegments)
       if (chunkSegments.length > 0) {
@@ -109,6 +119,7 @@ export async function handleTranscribe(payload: TranscribePayload) {
         sessionId: payload.sessionId,
         segments: normalizedSegments,
         rawText: rawOutputs.join('\n\n'),
+        warnings,
       },
     })
   } catch (err) {
@@ -288,6 +299,10 @@ function getTranscriptChunkSeconds(value: number) {
 function getTranscriptOverlapSeconds(value: number, chunkSeconds: number) {
   if (!Number.isFinite(value)) return DEFAULT_TRANSCRIPTION_OVERLAP_SECONDS
   return Math.max(0, Math.min(chunkSeconds - 0.1, Math.round(value * 10) / 10))
+}
+
+function isOptionalTailChunk(chunk: AudioChunk, chunks: AudioChunk[], index: number) {
+  return index === chunks.length - 1 && chunk.endTime - chunk.startTime <= OPTIONAL_TAIL_CHUNK_SECONDS
 }
 
 function getAudioExtension(mimeType: string) {

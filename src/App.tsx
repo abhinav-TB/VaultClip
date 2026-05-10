@@ -18,6 +18,11 @@ function App() {
     audioFormat: 'wav',
     transcriptChunkSeconds: 30,
     transcriptOverlapSeconds: 0.1,
+    frameIntervalSeconds: 5,
+    maxFrameSamples: 60,
+    frameMaxWidth: 512,
+    frameImageFormat: 'jpeg',
+    frameImageQuality: 0.72,
   })
 
   return (

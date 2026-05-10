@@ -13,6 +13,8 @@ import type { GenerationSettings } from '../types/generation'
 import { workerClient } from '../services/workerClient'
 import type { ExtractAudioResult, TranscribePartialResult, TranscribeResult } from '../workers/types'
 import { AudioSection, HiddenMediaInput, LoadingMetadataNotice, MediaDropZone, MediaErrorNotice, MediaMetadataGrid, MediaPanelHeader, MediaPreview, PanelActions, TranscriptSection, VideoWarnings } from './VideoUploadPanelSections'
+import { FrameSamplingSection } from './FrameSamplingSection'
+import { useFrameSampling } from '../store/hooks/useFrameSampling'
 
 export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings }) => {
   const dispatch = useAppDispatch()
@@ -31,6 +33,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
   const isExtractingAudio = audio.status === 'extracting'
   const isTranscribing = transcript.transcriptStatus === 'transcribing'
   const modelReady = modelStatus === 'ready'
+  const { frames, isSamplingFrames, sampleFrames, clearFrameArtifacts } = useFrameSampling(settings, activeSessionRef)
 
   useEffect(() => {
     objectUrlRef.current = video.fileUrl
@@ -46,8 +49,9 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       }
       clearVideoFiles()
       clearAudioData()
+      clearFrameArtifacts()
     }
-  }, [])
+  }, [clearFrameArtifacts])
 
   useEffect(() => {
     if (video.status !== 'ready') return
@@ -60,6 +64,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       revokeAudioObjectUrl()
       clearAudioData()
       clearVideoFiles()
+      clearFrameArtifacts()
       activeSessionRef.current = null
       dispatch(clearAudio())
       dispatch(clearContext())
@@ -82,7 +87,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
         warnings,
       }))
     }
-  }, [dispatch, settings, video.duration, video.lastModified, video.mediaKind, video.name, video.sessionId, video.size, video.status, video.type, video.warnings])
+  }, [clearFrameArtifacts, dispatch, settings, video.duration, video.lastModified, video.mediaKind, video.name, video.sessionId, video.size, video.status, video.type, video.warnings])
 
   const revokeActiveObjectUrl = () => {
     const activeUrl = objectUrlRef.current
@@ -112,6 +117,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
     revokeAudioObjectUrl()
     clearVideoFiles()
     clearAudioData()
+    clearFrameArtifacts()
     resetInput()
     dispatch({ type: RESET_APP_STATE })
   }
@@ -251,6 +257,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       dispatch(setTranscriptResult({
         segments: result.segments,
         rawText: result.rawText,
+        warnings: result.warnings,
       }))
       dispatch(setProcessingStatus('complete'))
       dispatch(setProcessingProgress(100))
@@ -273,6 +280,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
     revokeAudioObjectUrl()
     clearVideoFiles()
     clearAudioData()
+    clearFrameArtifacts()
     activeSessionRef.current = null
     dispatch({ type: RESET_APP_STATE })
 
@@ -427,6 +435,19 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
               <VideoWarnings warnings={video.warnings} />
             )}
 
+            {isVideoInput && (
+              <FrameSamplingSection
+                status={frames.status}
+                progress={frames.progress}
+                phase={frames.phase}
+                error={frames.error}
+                samples={frames.samples}
+                settings={settings}
+                isSampling={isSamplingFrames}
+                onSampleFrames={() => void sampleFrames()}
+              />
+            )}
+
             <AudioSection
               isAudioInput={isAudioInput}
               isVideoInput={isVideoInput}
@@ -450,6 +471,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
                 progress={transcript.transcriptProgress}
                 phase={transcript.transcriptPhase}
                 error={transcript.transcriptError}
+                warnings={transcript.transcriptWarnings}
                 segments={transcript.transcriptSegments}
                 settings={settings}
                 modelReady={modelReady}

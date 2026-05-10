@@ -15,7 +15,7 @@ export function formatFileSize(size: number | null) {
 
 /** Formats seconds as `m:ss` or `h:mm:ss` for media timestamps. */
 export function formatDuration(duration: number | null) {
-  if (!duration) return 'Unknown'
+  if (duration == null || !Number.isFinite(duration) || duration < 0) return 'Unknown'
   const totalSeconds = Math.round(duration)
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
@@ -62,4 +62,28 @@ export function clampTranscriptOverlapSeconds(value: number, chunkSeconds: numbe
 /** Formats audio sample rate for UI labels. */
 export function formatAudioSampleRate(sampleRate: number) {
   return sampleRate >= 1000 ? `${sampleRate / 1000} kHz` : `${sampleRate} Hz`
+}
+
+/** Clamps frame sampling interval in seconds. */
+export function clampFrameIntervalSeconds(value: number) {
+  if (!Number.isFinite(value)) return 5
+  return Math.max(1, Math.min(30, Math.round(value)))
+}
+
+/** Clamps maximum sampled frame count. */
+export function clampMaxFrameSamples(value: number) {
+  if (!Number.isFinite(value)) return 60
+  return Math.max(5, Math.min(120, Math.round(value)))
+}
+
+/** Clamps sampled frame max width in pixels. */
+export function clampFrameMaxWidth(value: number) {
+  if (!Number.isFinite(value)) return 512
+  return Math.max(256, Math.min(1280, Math.round(value)))
+}
+
+/** Clamps canvas encoding quality for sampled frames. */
+export function clampFrameImageQuality(value: number) {
+  if (!Number.isFinite(value)) return 0.72
+  return Math.max(0.4, Math.min(0.95, Math.round(value * 100) / 100))
 }

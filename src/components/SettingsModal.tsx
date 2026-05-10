@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import type { GenerationSettings } from '../types/generation'
-import { clampTokenLimit, clampTranscriptChunkSeconds, clampTranscriptOverlapSeconds, clampVideoDurationLimit, clampVideoSizeLimit, formatAudioSampleRate } from '../lib/format'
+import { clampFrameImageQuality, clampFrameIntervalSeconds, clampFrameMaxWidth, clampMaxFrameSamples, clampTokenLimit, clampTranscriptChunkSeconds, clampTranscriptOverlapSeconds, clampVideoDurationLimit, clampVideoSizeLimit, formatAudioSampleRate } from '../lib/format'
 
 const AUDIO_SAMPLE_RATES = [16000, 24000, 48000] as const
 const AUDIO_FORMATS = ['wav', 'flac'] as const
 const TRANSCRIPT_TOKEN_OPTIONS = [512, 1024, 2048, 'unlimited'] as const
+const FRAME_IMAGE_FORMATS = ['jpeg', 'webp'] as const
 
 export const SettingsModal = ({
   settings,
@@ -13,10 +15,32 @@ export const SettingsModal = ({
   settings: GenerationSettings
   onChange: (settings: GenerationSettings) => void
   onClose: () => void
-}) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-    <div className="w-full max-w-md overflow-hidden rounded-xl border border-gray-800 bg-gray-950 shadow-2xl">
-      <div className="flex items-center justify-between border-b border-gray-800 bg-gray-900 px-5 py-4">
+}) => {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose()
+        }
+      }}
+    >
+      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-gray-800 bg-gray-950 shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-800 bg-gray-900 px-5 py-4">
         <div>
           <h2 id="settings-title" className="text-sm font-bold text-gray-100">Settings</h2>
           <p className="text-xs text-gray-500">Generation and video budget settings.</p>
@@ -34,7 +58,7 @@ export const SettingsModal = ({
         </button>
       </div>
 
-      <div className="space-y-5 p-5">
+      <div className="flex-1 space-y-5 overflow-y-auto p-5">
         <SettingsSectionTitle
           title="Chat"
           description="Controls replies in the private chat panel only."
@@ -249,13 +273,115 @@ export const SettingsModal = ({
           </div>
         </div>
 
-        <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3 text-xs leading-5 text-gray-500">
+        <SettingsSectionTitle
+          title="Frame Sampling"
+          description="Controls bounded video thumbnails for visual timeline reasoning."
+        />
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <label htmlFor="settings-frame-interval" className="text-sm font-medium text-gray-200">
+              Frame interval
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="settings-frame-interval"
+                type="number"
+                min="1"
+                max="30"
+                step="1"
+                value={settings.frameIntervalSeconds}
+                onChange={(e) => onChange({ ...settings, frameIntervalSeconds: clampFrameIntervalSeconds(Number(e.target.value)) })}
+                className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                aria-label="Frame sampling interval in seconds"
+              />
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-600">sec</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="settings-max-frame-samples" className="text-sm font-medium text-gray-200">
+              Max frames
+            </label>
+            <input
+              id="settings-max-frame-samples"
+              type="number"
+              min="5"
+              max="120"
+              step="5"
+              value={settings.maxFrameSamples}
+              onChange={(e) => onChange({ ...settings, maxFrameSamples: clampMaxFrameSamples(Number(e.target.value)) })}
+              className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+              aria-label="Maximum sampled frame count"
+            />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="settings-frame-max-width" className="text-sm font-medium text-gray-200">
+              Max width
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="settings-frame-max-width"
+                type="number"
+                min="256"
+                max="1280"
+                step="64"
+                value={settings.frameMaxWidth}
+                onChange={(e) => onChange({ ...settings, frameMaxWidth: clampFrameMaxWidth(Number(e.target.value)) })}
+                className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                aria-label="Maximum sampled frame width in pixels"
+              />
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-600">px</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="settings-frame-format" className="text-sm font-medium text-gray-200">
+              Image format
+            </label>
+            <select
+              id="settings-frame-format"
+              value={settings.frameImageFormat}
+              onChange={(e) => onChange({ ...settings, frameImageFormat: e.target.value as GenerationSettings['frameImageFormat'] })}
+              className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm font-semibold uppercase text-gray-200 focus:outline-none focus:border-blue-500"
+            >
+              {FRAME_IMAGE_FORMATS.map((format) => (
+                <option key={format} value={format}>
+                  {format}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <label htmlFor="settings-frame-quality" className="text-sm font-medium text-gray-200">
+              Image quality
+            </label>
+            <span className="font-mono text-sm text-gray-300">{settings.frameImageQuality.toFixed(2)}</span>
+          </div>
+          <input
+            id="settings-frame-quality"
+            type="range"
+            min="0.4"
+            max="0.95"
+            step="0.01"
+            value={settings.frameImageQuality}
+            onChange={(e) => onChange({ ...settings, frameImageQuality: clampFrameImageQuality(Number(e.target.value)) })}
+            className="h-2 w-full cursor-pointer accent-blue-500"
+          />
+          <p className="text-xs leading-5 text-gray-500">
+            JPEG at 512px and 0.72 quality is the default balance. WebP can be smaller when browser encoding supports it.
+          </p>
+        </div>
+
+          <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3 text-xs leading-5 text-gray-500">
           Higher limits allow longer answers and larger videos, but browser processing takes longer and uses more memory. Audio extraction produces mono files for transcription.
         </div>
       </div>
     </div>
   </div>
-)
+  )
+}
 
 const SettingsSectionTitle = ({ title, description }: { title: string; description: string }) => (
   <div className="border-t border-gray-800 pt-5 first:border-t-0 first:pt-0">
