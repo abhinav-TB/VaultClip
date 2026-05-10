@@ -97,6 +97,40 @@ export interface TranscribePartialResult {
   rawText: string
 }
 
+export interface FrameSummaryInput {
+  id: string
+  index: number
+  timestamp: number
+  targetTimestamp: number
+  dataUrl: string
+  mimeType: string
+}
+
+export interface ProcessFramesPayload {
+  sessionId: string
+  frames: FrameSummaryInput[]
+}
+
+export interface FrameSummaryResultItem {
+  frameId: string
+  index: number
+  timestamp: number
+  targetTimestamp: number
+  summary: string
+  source: 'gemma-frame-summary'
+}
+
+export interface ProcessFramesResult {
+  sessionId: string
+  summaries: FrameSummaryResultItem[]
+  warnings: string[]
+}
+
+export interface ProcessFramesPartialResult {
+  sessionId: string
+  summary: FrameSummaryResultItem
+}
+
 export interface WorkerRequest<T = unknown> {
   type: WorkerTaskType
   payload?: T

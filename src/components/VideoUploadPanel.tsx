@@ -15,6 +15,7 @@ import type { ExtractAudioResult, TranscribePartialResult, TranscribeResult } fr
 import { AudioSection, HiddenMediaInput, LoadingMetadataNotice, MediaDropZone, MediaErrorNotice, MediaMetadataGrid, MediaPanelHeader, MediaPreview, PanelActions, TranscriptSection, VideoWarnings } from './VideoUploadPanelSections'
 import { FrameSamplingSection } from './FrameSamplingSection'
 import { useFrameSampling } from '../store/hooks/useFrameSampling'
+import { useFrameSummaries } from '../store/hooks/useFrameSummaries'
 
 export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings }) => {
   const dispatch = useAppDispatch()
@@ -34,11 +35,11 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
   const isTranscribing = transcript.transcriptStatus === 'transcribing'
   const modelReady = modelStatus === 'ready'
   const { frames, isSamplingFrames, sampleFrames, clearFrameArtifacts } = useFrameSampling(settings, activeSessionRef)
+  const { isSummarizingFrames, summarizeFrames } = useFrameSummaries(activeSessionRef)
 
   useEffect(() => {
     objectUrlRef.current = video.fileUrl
   }, [video.fileUrl])
-
   useEffect(() => {
     return () => {
       if (objectUrlRef.current) {
@@ -96,7 +97,6 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       objectUrlRef.current = null
     }
   }
-
   const revokeAudioObjectUrl = () => {
     const activeUrl = audioObjectUrlRef.current
     if (activeUrl) {
@@ -110,7 +110,6 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       inputRef.current.value = ''
     }
   }
-
   const resetVideoSession = () => {
     activeSessionRef.current = null
     revokeActiveObjectUrl()
@@ -442,9 +441,18 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
                 phase={frames.phase}
                 error={frames.error}
                 samples={frames.samples}
+                summaries={frames.summaries}
+                summaryStatus={frames.summaryStatus}
+                summaryProgress={frames.summaryProgress}
+                summaryPhase={frames.summaryPhase}
+                summaryError={frames.summaryError}
+                summaryWarnings={frames.summaryWarnings}
                 settings={settings}
                 isSampling={isSamplingFrames}
+                isSummarizing={isSummarizingFrames}
+                modelReady={modelReady}
                 onSampleFrames={() => void sampleFrames()}
+                onSummarizeFrames={() => void summarizeFrames()}
               />
             )}
 
