@@ -40,7 +40,9 @@ export function useFrameSampling(settings: GenerationSettings, activeSessionRef:
     dispatch(setFrameSamplingStarted({
       sessionId,
       settings: {
+        samplingMode: settings.frameSamplingMode,
         intervalSeconds: settings.frameIntervalSeconds,
+        targetFrameCount: settings.targetFrameCount,
         maxSamples: settings.maxFrameSamples,
         maxWidth: settings.frameMaxWidth,
         imageFormat: settings.frameImageFormat,

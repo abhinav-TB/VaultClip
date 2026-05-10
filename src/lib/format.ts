@@ -76,6 +76,12 @@ export function clampMaxFrameSamples(value: number) {
   return Math.max(5, Math.min(120, Math.round(value)))
 }
 
+/** Clamps target frame count. */
+export function clampTargetFrameCount(value: number) {
+  if (!Number.isFinite(value)) return 20
+  return Math.max(2, Math.min(100, Math.round(value)))
+}
+
 /** Clamps sampled frame max width in pixels. */
 export function clampFrameMaxWidth(value: number) {
   if (!Number.isFinite(value)) return 512

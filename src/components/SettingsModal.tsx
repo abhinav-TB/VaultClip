@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import React, { useEffect } from 'react'
 import type { GenerationSettings } from '../types/generation'
-import { clampFrameImageQuality, clampFrameIntervalSeconds, clampFrameMaxWidth, clampMaxFrameSamples, clampTokenLimit, clampTranscriptChunkSeconds, clampTranscriptOverlapSeconds, clampVideoDurationLimit, clampVideoSizeLimit, formatAudioSampleRate } from '../lib/format'
+import { clampFrameImageQuality, clampFrameIntervalSeconds, clampFrameMaxWidth, clampMaxFrameSamples, clampTargetFrameCount, clampTokenLimit, clampTranscriptChunkSeconds, clampTranscriptOverlapSeconds, clampVideoDurationLimit, clampVideoSizeLimit, formatAudioSampleRate } from '../lib/format'
 
 const AUDIO_SAMPLE_RATES = [16000, 24000, 48000] as const
 const AUDIO_FORMATS = ['wav', 'flac'] as const
@@ -278,77 +278,142 @@ export const SettingsModal = ({
           description="Controls bounded video thumbnails for visual timeline reasoning."
         />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <label htmlFor="settings-frame-interval" className="text-sm font-medium text-gray-200">
-              Frame interval
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                id="settings-frame-interval"
-                type="number"
-                min="1"
-                max="30"
-                step="1"
-                value={settings.frameIntervalSeconds}
-                onChange={(e) => onChange({ ...settings, frameIntervalSeconds: clampFrameIntervalSeconds(Number(e.target.value)) })}
-                className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-                aria-label="Frame sampling interval in seconds"
-              />
-              <span className="text-xs font-bold uppercase tracking-wide text-gray-600">sec</span>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="settings-max-frame-samples" className="text-sm font-medium text-gray-200">
-              Max frames
-            </label>
-            <input
-              id="settings-max-frame-samples"
-              type="number"
-              min="5"
-              max="120"
-              step="5"
-              value={settings.maxFrameSamples}
-              onChange={(e) => onChange({ ...settings, maxFrameSamples: clampMaxFrameSamples(Number(e.target.value)) })}
-              className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-              aria-label="Maximum sampled frame count"
-            />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="settings-frame-max-width" className="text-sm font-medium text-gray-200">
-              Max width
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                id="settings-frame-max-width"
-                type="number"
-                min="256"
-                max="1280"
-                step="64"
-                value={settings.frameMaxWidth}
-                onChange={(e) => onChange({ ...settings, frameMaxWidth: clampFrameMaxWidth(Number(e.target.value)) })}
-                className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-                aria-label="Maximum sampled frame width in pixels"
-              />
-              <span className="text-xs font-bold uppercase tracking-wide text-gray-600">px</span>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="settings-frame-format" className="text-sm font-medium text-gray-200">
-              Image format
-            </label>
-            <select
-              id="settings-frame-format"
-              value={settings.frameImageFormat}
-              onChange={(e) => onChange({ ...settings, frameImageFormat: e.target.value as GenerationSettings['frameImageFormat'] })}
-              className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm font-semibold uppercase text-gray-200 focus:outline-none focus:border-blue-500"
+        <div className="space-y-4">
+          <div className="flex gap-1 rounded-lg border border-gray-800 bg-gray-900/50 p-1">
+            <button
+              type="button"
+              onClick={() => onChange({ ...settings, frameSamplingMode: 'count' })}
+              className={`flex-1 rounded-md py-1.5 text-xs font-bold transition-all ${
+                settings.frameSamplingMode === 'count'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
             >
-              {FRAME_IMAGE_FORMATS.map((format) => (
-                <option key={format} value={format}>
-                  {format}
-                </option>
-              ))}
-            </select>
+              Number of Frames
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange({ ...settings, frameSamplingMode: 'interval' })}
+              className={`flex-1 rounded-md py-1.5 text-xs font-bold transition-all ${
+                settings.frameSamplingMode === 'interval'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              Fixed Interval
+            </button>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {settings.frameSamplingMode === 'interval' ? (
+              <>
+                <div className="space-y-2">
+                  <label htmlFor="settings-frame-interval" className="text-sm font-medium text-gray-200">
+                    Frame interval
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="settings-frame-interval"
+                      type="number"
+                      min="1"
+                      max="30"
+                      step="1"
+                      value={settings.frameIntervalSeconds}
+                      onChange={(e) => onChange({ ...settings, frameIntervalSeconds: clampFrameIntervalSeconds(Number(e.target.value)) })}
+                      className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                      aria-label="Frame sampling interval in seconds"
+                    />
+                    <span className="text-xs font-bold uppercase tracking-wide text-gray-600">sec</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="settings-max-frame-samples" className="text-sm font-medium text-gray-200">
+                    Max frames
+                  </label>
+                  <input
+                    id="settings-max-frame-samples"
+                    type="number"
+                    min="5"
+                    max="120"
+                    step="5"
+                    value={settings.maxFrameSamples}
+                    onChange={(e) => onChange({ ...settings, maxFrameSamples: clampMaxFrameSamples(Number(e.target.value)) })}
+                    className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                    aria-label="Maximum sampled frame count"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2 sm:col-span-2">
+                <label htmlFor="settings-target-frame-count" className="text-sm font-medium text-gray-200">
+                  Target number of frames
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    id="settings-target-frame-count"
+                    type="range"
+                    min="2"
+                    max="100"
+                    step="1"
+                    value={settings.targetFrameCount}
+                    onChange={(e) => onChange({ ...settings, targetFrameCount: clampTargetFrameCount(Number(e.target.value)) })}
+                    className="h-2 flex-1 cursor-pointer accent-blue-500"
+                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="2"
+                      max="100"
+                      step="1"
+                      value={settings.targetFrameCount}
+                      onChange={(e) => onChange({ ...settings, targetFrameCount: clampTargetFrameCount(Number(e.target.value)) })}
+                      className="w-16 rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                    />
+                    <span className="text-xs font-bold uppercase tracking-wide text-gray-600">frames</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">
+                  Recommended: 10-30 frames for balanced performance.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label htmlFor="settings-frame-max-width" className="text-sm font-medium text-gray-200">
+                Max width
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="settings-frame-max-width"
+                  type="number"
+                  min="256"
+                  max="1280"
+                  step="64"
+                  value={settings.frameMaxWidth}
+                  onChange={(e) => onChange({ ...settings, frameMaxWidth: clampFrameMaxWidth(Number(e.target.value)) })}
+                  className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                  aria-label="Maximum sampled frame width in pixels"
+                />
+                <span className="text-xs font-bold uppercase tracking-wide text-gray-600">px</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="settings-frame-format" className="text-sm font-medium text-gray-200">
+                Image format
+              </label>
+              <select
+                id="settings-frame-format"
+                value={settings.frameImageFormat}
+                onChange={(e) => onChange({ ...settings, frameImageFormat: e.target.value as GenerationSettings['frameImageFormat'] })}
+                className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm font-semibold uppercase text-gray-200 focus:outline-none focus:border-blue-500"
+              >
+                {FRAME_IMAGE_FORMATS.map((format) => (
+                  <option key={format} value={format}>
+                    {format}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 

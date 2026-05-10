@@ -14,7 +14,7 @@ export interface SampledFrameBlob {
 interface SampleVideoFramesOptions {
   fileUrl: string
   duration: number
-  settings: Pick<GenerationSettings, 'frameIntervalSeconds' | 'maxFrameSamples' | 'frameMaxWidth' | 'frameImageFormat' | 'frameImageQuality'>
+  settings: Pick<GenerationSettings, 'frameSamplingMode' | 'frameIntervalSeconds' | 'targetFrameCount' | 'maxFrameSamples' | 'frameMaxWidth' | 'frameImageFormat' | 'frameImageQuality'>
   onProgress?: (progress: number, phase: string) => void
 }
 
@@ -25,7 +25,7 @@ export async function sampleVideoFrames({
   settings,
   onProgress,
 }: SampleVideoFramesOptions): Promise<SampledFrameBlob[]> {
-  const targets = buildFrameTargets(duration, settings.frameIntervalSeconds, settings.maxFrameSamples)
+  const targets = buildFrameTargets(duration, settings)
   if (targets.length === 0) {
     throw new Error('No usable video duration was available for frame sampling.')
   }
@@ -88,11 +88,23 @@ export async function sampleVideoFrames({
 }
 
 /** Builds bounded target timestamps that preserve full-video coverage. */
-export function buildFrameTargets(duration: number, intervalSeconds: number, maxSamples: number) {
+export function buildFrameTargets(
+  duration: number,
+  settings: Pick<GenerationSettings, 'frameSamplingMode' | 'frameIntervalSeconds' | 'targetFrameCount' | 'maxFrameSamples'>,
+) {
   if (!Number.isFinite(duration) || duration <= 0) return []
 
   const safeEnd = Math.max(0, duration - 0.05)
   if (safeEnd === 0) return [0]
+
+  if (settings.frameSamplingMode === 'count') {
+    const count = settings.targetFrameCount
+    if (count <= 1) return [0]
+    return Array.from({ length: count }, (_, index) => roundTimestamp((safeEnd * index) / (count - 1)))
+  }
+
+  const intervalSeconds = settings.frameIntervalSeconds
+  const maxSamples = settings.maxFrameSamples
 
   const intervalTargets: number[] = []
   for (let timestamp = 0; timestamp <= safeEnd; timestamp += intervalSeconds) {

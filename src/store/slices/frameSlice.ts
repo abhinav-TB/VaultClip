@@ -29,7 +29,9 @@ export interface FrameSummary {
 }
 
 interface FrameSettingsSnapshot {
+  samplingMode: 'interval' | 'count'
   intervalSeconds: number
+  targetFrameCount: number
   maxSamples: number
   maxWidth: number
   imageFormat: FrameImageFormat

@@ -7,7 +7,9 @@ export interface GenerationSettings {
   audioFormat: 'wav' | 'flac'
   transcriptChunkSeconds: number
   transcriptOverlapSeconds: number
+  frameSamplingMode: 'interval' | 'count'
   frameIntervalSeconds: number
+  targetFrameCount: number
   maxFrameSamples: number
   frameMaxWidth: number
   frameImageFormat: 'jpeg' | 'webp'

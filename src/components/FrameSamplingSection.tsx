@@ -53,7 +53,9 @@ export const FrameSamplingSection = ({
         <div>
           <p className="text-sm font-semibold text-gray-100">Frame samples</p>
           <p className="mt-1 text-xs leading-5 text-gray-500">
-            Every {settings.frameIntervalSeconds}s, capped at {settings.maxFrameSamples} frames. Output: {settings.frameImageFormat.toUpperCase()} {settings.frameMaxWidth}px at {settings.frameImageQuality.toFixed(2)} quality.
+            {settings.frameSamplingMode === 'count'
+              ? `Targeting ${settings.targetFrameCount} frames across video.`
+              : `Every ${settings.frameIntervalSeconds}s, capped at ${settings.maxFrameSamples} frames.`} Output: {settings.frameImageFormat.toUpperCase()} {settings.frameMaxWidth}px at {settings.frameImageQuality.toFixed(2)} quality.
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
