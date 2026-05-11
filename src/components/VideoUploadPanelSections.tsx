@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { GenerationSettings } from '../types/generation'
 import { formatAudioSampleRate, formatDuration, formatFileSize } from '../lib/format'
 import { VIDEO_ACCEPT } from '../lib/video'
@@ -96,20 +97,37 @@ interface MediaPreviewProps {
 }
 
 /** Browser-native preview for the selected audio or video file. */
-export const MediaPreview = ({ mediaKind, fileUrl }: MediaPreviewProps) => (
-  mediaKind === 'audio' ? (
+export const MediaPreview = ({ mediaKind, fileUrl }: MediaPreviewProps) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+
+  useEffect(() => {
+    const handleSeek = (event: Event) => {
+      const detail = (event as CustomEvent<{ time?: number }>).detail
+      const mediaElement = audioRef.current ?? videoRef.current
+      if (mediaElement && typeof detail?.time === 'number') {
+        mediaElement.currentTime = Math.max(0, detail.time)
+      }
+    }
+
+    window.addEventListener('clipmind:seek-media', handleSeek)
+    return () => window.removeEventListener('clipmind:seek-media', handleSeek)
+  }, [])
+
+  return mediaKind === 'audio' ? (
     <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-5">
       <p className="mb-3 text-sm font-semibold text-gray-100">Audio preview</p>
-      <audio src={fileUrl ?? undefined} controls className="w-full" />
+      <audio ref={audioRef} src={fileUrl ?? undefined} controls className="w-full" />
     </div>
   ) : (
     <video
+      ref={videoRef}
       src={fileUrl ?? undefined}
       controls
       className="aspect-video w-full rounded-xl border border-gray-800 bg-black object-contain"
     />
   )
-)
+}
 
 interface MediaMetadataGridProps {
   mediaKind: MediaKind | null

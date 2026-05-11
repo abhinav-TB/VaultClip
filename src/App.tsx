@@ -11,6 +11,8 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [generationSettings, setGenerationSettings] = useState<GenerationSettings>({
     maxNewTokens: 128,
+    retrievalMode: 'hybrid',
+    embeddingModelId: 'onnx-community/all-MiniLM-L6-v2-ONNX',
     transcriptMaxNewTokens: 512,
     maxVideoSizeMb: 100,
     maxVideoDurationMinutes: 10,

@@ -1,5 +1,7 @@
 export interface GenerationSettings {
   maxNewTokens: number
+  retrievalMode: 'hybrid' | 'lexical'
+  embeddingModelId: string
   transcriptMaxNewTokens: 512 | 1024 | 2048 | 'unlimited'
   maxVideoSizeMb: number
   maxVideoDurationMinutes: number

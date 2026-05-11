@@ -7,6 +7,7 @@ export type WorkerTaskType =
   | 'EXTRACT_AUDIO'
   | 'TRANSCRIBE'
   | 'PROCESS_FRAMES'
+  | 'EMBED_TEXTS'
   | 'CHALLENGE_RESPONSE'
 
 export type WorkerMessageType = 'READY' | 'PROGRESS' | 'SUCCESS' | 'ERROR' | 'LOG' | 'PARTIAL'
@@ -129,6 +130,17 @@ export interface ProcessFramesResult {
 export interface ProcessFramesPartialResult {
   sessionId: string
   summary: FrameSummaryResultItem
+}
+
+export interface EmbedTextsPayload {
+  modelId: string
+  texts: string[]
+}
+
+export interface EmbedTextsResult {
+  modelId: string
+  dimensions: number
+  embeddings: number[][]
 }
 
 export interface WorkerRequest<T = unknown> {

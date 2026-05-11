@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useAppSelector } from '../store/hooks'
+import { useRagIndex } from '../store/hooks/useRagIndex'
 import { useWorker } from '../store/hooks/useWorker'
 import type { GenerationSettings } from '../types/generation'
+import { formatRagContext, formatTime } from '../lib/rag'
 import { getLoadingMessage, getPhaseProgressLabel, getSourceLabel, getStageLabel } from '../lib/modelRuntime'
 import { RuntimeDetail } from './RuntimeDetail'
+import type { RagRetrievedChunk } from '../store/slices/ragSlice'
 
 interface PreviewAttachment {
   file: File
@@ -23,9 +26,22 @@ interface ChatResponse {
   metrics: ChatMetrics
 }
 
+interface ChatViewMessage {
+  role: 'user' | 'ai'
+  content: string
+  metrics?: ChatMetrics
+  citations?: RagRetrievedChunk[]
+}
+
 export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
   const { startTask, loadModel } = useWorker()
+  const { buildIndex, rag, retrieveContext } = useRagIndex(settings)
   const { status: processingStatus } = useAppSelector((state) => state.processing)
+  const transcriptStatus = useAppSelector((state) => state.context.transcriptStatus)
+  const transcriptCount = useAppSelector((state) => state.context.transcriptSegments.length)
+  const frameSummaryStatus = useAppSelector((state) => state.frames.summaryStatus)
+  const frameSummaryCount = useAppSelector((state) => state.frames.summaries.length)
+  const canBuildIndex = transcriptCount > 0 || frameSummaryCount > 0
   const {
     status: modelStatus,
     error: modelError,
@@ -34,7 +50,7 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
     loadSource,
   } = useAppSelector((state) => state.model)
   const [input, setInput] = useState('')
-  const [messages, setMessages] = useState<{ role: 'user' | 'ai'; content: string; metrics?: ChatMetrics }[]>([])
+  const [messages, setMessages] = useState<ChatViewMessage[]>([])
   const [attachments, setAttachments] = useState<PreviewAttachment[]>([])
   const modelReady = modelStatus === 'ready'
   const modelLoading = modelStatus === 'loading'
@@ -79,6 +95,8 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
 
     const userMsg = input
     const payloadAttachments = attachments.map(a => ({ type: a.type, data: a.content, name: a.file.name }))
+    const retrievedChunks = userMsg.trim() ? await retrieveContext(userMsg) : []
+    const groundedPrompt = buildGroundedPrompt(userMsg || 'Please analyze the attached files.', retrievedChunks)
 
     setInput('')
     setAttachments([])
@@ -91,7 +109,7 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
 
     try {
       const response = await startTask<ChatResponse>('CHALLENGE_RESPONSE', {
-        prompt: userMsg || 'Please analyze the attached files.',
+        prompt: groundedPrompt,
         attachments: payloadAttachments,
         maxNewTokens: settings.maxNewTokens,
       }, (log) => {
@@ -116,6 +134,7 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
             role: 'ai',
             content: response.text,
             metrics: response.metrics,
+            citations: retrievedChunks,
           }
         }
         return newArr
@@ -186,6 +205,23 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
       )}
 
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <ContextIndexStatus
+          status={rag.status}
+          embeddingStatus={rag.embeddingStatus}
+          retrievalMode={rag.retrievalMode}
+          chunkCount={rag.chunks.length}
+          warning={rag.warning}
+          error={rag.error}
+          phase={rag.phase}
+          progress={rag.progress}
+          transcriptStatus={transcriptStatus}
+          transcriptCount={transcriptCount}
+          frameSummaryStatus={frameSummaryStatus}
+          frameSummaryCount={frameSummaryCount}
+          canBuildIndex={canBuildIndex}
+          onBuildIndex={() => void buildIndex()}
+        />
+
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-2">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-2 opacity-50"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
@@ -216,6 +252,24 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
                     <span>💾 {m.metrics.memory.used}</span>
                   </>
                 )}
+              </div>
+            )}
+
+            {m.citations && m.citations.length > 0 && (
+              <div className="mt-2 flex max-w-[80%] flex-wrap gap-2">
+                {m.citations.map((citation, index) => (
+                  <button
+                    key={citation.id}
+                    type="button"
+                    onClick={() => seekMedia(citation.startTime)}
+                    className="rounded-md border border-gray-700 bg-gray-900 px-2 py-1 font-mono text-[10px] text-blue-300 transition-colors hover:border-blue-500 hover:bg-blue-500/10"
+                    title={citation.text}
+                  >
+                    [{index + 1}] {citation.source === 'frame-summary'
+                      ? `${formatTime(citation.startTime)} frame`
+                      : `${formatTime(citation.startTime)}-${formatTime(citation.endTime)}`}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -275,4 +329,139 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
       </div>
     </div>
   )
+}
+
+function buildGroundedPrompt(userPrompt: string, retrievedChunks: RagRetrievedChunk[]) {
+  if (!retrievedChunks.length) return userPrompt
+
+  return [
+    'Answer the user question using the retrieved local media context below.',
+    'Use the provided citation numbers and timestamp ranges when evidence supports the answer.',
+    'If the retrieved context is insufficient, say what is missing instead of guessing.',
+    '',
+    'Retrieved context:',
+    formatRagContext(retrievedChunks),
+    '',
+    `Question: ${userPrompt}`,
+  ].join('\n')
+}
+
+function seekMedia(time: number) {
+  window.dispatchEvent(new CustomEvent('clipmind:seek-media', { detail: { time } }))
+}
+
+const ContextIndexStatus = ({
+  status,
+  embeddingStatus,
+  retrievalMode,
+  chunkCount,
+  warning,
+  error,
+  phase,
+  progress,
+  transcriptStatus,
+  transcriptCount,
+  frameSummaryStatus,
+  frameSummaryCount,
+  canBuildIndex,
+  onBuildIndex,
+}: {
+  status: string
+  embeddingStatus: string
+  retrievalMode: string
+  chunkCount: number
+  warning: string | null
+  error: string | null
+  phase: string | null
+  progress: number
+  transcriptStatus: string
+  transcriptCount: number
+  frameSummaryStatus: string
+  frameSummaryCount: number
+  canBuildIndex: boolean
+  onBuildIndex: () => void
+}) => {
+  const waiting = status === 'idle'
+  const ready = status === 'ready'
+  const indexing = status === 'indexing'
+  const hasTranscript = transcriptCount > 0
+  const hasFrameSummaries = frameSummaryCount > 0
+  const canStartIndex = canBuildIndex || hasTranscript || hasFrameSummaries
+  const title = waiting
+    ? 'Context index: waiting for transcript or frame summaries'
+    : ready
+      ? `Context index: ${chunkCount} chunks ready`
+      : `Context index: ${phase ?? status}`
+  const detail = waiting
+    ? getWaitingContextMessage(transcriptStatus, hasTranscript, frameSummaryStatus, hasFrameSummaries)
+    : ready
+      ? `${transcriptCount} transcript segments and ${frameSummaryCount} frame summaries are available for timestamped retrieval.`
+      : phase ?? 'Preparing timestamped retrieval context.'
+  const dotClass = status === 'error'
+    ? 'bg-red-500'
+    : ready
+      ? 'bg-green-500'
+      : indexing
+        ? 'bg-cyan-400 animate-pulse'
+        : 'bg-gray-500'
+
+  return (
+    <div className="rounded-lg border border-gray-800 bg-gray-950/70 px-3 py-3 text-xs text-gray-500">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+            <span className="font-semibold text-gray-300">{title}</span>
+          </div>
+          <p className="mt-1 leading-5 text-gray-500">{detail}</p>
+        </div>
+        <span className="shrink-0 rounded-md border border-gray-800 bg-gray-900 px-2 py-1 font-bold uppercase tracking-wide text-gray-500">
+          {getRetrievalLabel(retrievalMode, embeddingStatus)}
+        </span>
+      </div>
+      {!indexing && canStartIndex && (
+        <button
+          type="button"
+          onClick={onBuildIndex}
+          className="mt-3 w-full rounded-lg border border-cyan-500/40 bg-cyan-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:bg-cyan-500 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800 disabled:text-gray-500"
+        >
+          {ready ? 'Rebuild Context Index' : 'Build Context Index'}
+        </button>
+      )}
+      {status === 'indexing' && (
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-800">
+          <div className="h-full bg-cyan-500 transition-all duration-500" style={{ width: `${progress}%` }} />
+        </div>
+      )}
+      {warning && <p className="mt-2 leading-5 text-yellow-200/80">{warning}</p>}
+      {error && <p className="mt-2 leading-5 text-red-200/80">{error}</p>}
+    </div>
+  )
+}
+
+function getRetrievalLabel(retrievalMode: string, embeddingStatus: string) {
+  if (retrievalMode === 'lexical') return 'lexical'
+  if (embeddingStatus === 'ready') return 'hybrid + embeddings'
+  if (embeddingStatus === 'loading') return 'hybrid loading'
+  if (embeddingStatus === 'error') return 'hybrid fallback'
+  return 'hybrid'
+}
+
+function getWaitingContextMessage(transcriptStatus: string, hasTranscript: boolean, frameSummaryStatus: string, hasFrameSummaries: boolean) {
+  if (hasTranscript || hasFrameSummaries) {
+    return 'Context artifacts are available. Build the index when you are ready to use them for timestamped Q&A.'
+  }
+
+  const transcriptText = transcriptStatus === 'transcribing'
+    ? 'Transcript is currently running.'
+    : transcriptStatus === 'ready'
+      ? 'Transcript is ready.'
+      : 'Run Transcribe to add spoken context.'
+  const frameText = frameSummaryStatus === 'summarizing'
+    ? 'Frame summaries are currently running.'
+    : frameSummaryStatus === 'ready'
+      ? 'Frame summaries are ready.'
+      : 'Sample and summarize frames to add visual context.'
+
+  return `${transcriptText} ${frameText}`
 }

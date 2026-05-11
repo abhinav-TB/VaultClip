@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import type { GenerationSettings } from '../types/generation'
 import { clampFrameImageQuality, clampFrameIntervalSeconds, clampFrameMaxWidth, clampMaxFrameSamples, clampTargetFrameCount, clampTokenLimit, clampTranscriptChunkSeconds, clampTranscriptOverlapSeconds, clampVideoDurationLimit, clampVideoSizeLimit, formatAudioSampleRate } from '../lib/format'
+import { RagSettingsSection } from './RagSettingsSection'
 
 const AUDIO_SAMPLE_RATES = [16000, 24000, 48000] as const
 const AUDIO_FORMATS = ['wav', 'flac'] as const
@@ -99,6 +100,12 @@ export const SettingsModal = ({
             <span>Long</span>
           </div>
         </div>
+
+        <SettingsSectionTitle
+          title="RAG Retrieval"
+          description="Controls timestamped context retrieval for media Q&A."
+        />
+        <RagSettingsSection settings={settings} onChange={onChange} />
 
         <SettingsSectionTitle
           title="Transcription"

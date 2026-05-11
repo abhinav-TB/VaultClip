@@ -1,9 +1,10 @@
 import { handleExtractAudio } from './audioExtractionTask'
 import { handleChat } from './chatTask'
+import { handleEmbedTexts } from './embeddingTask'
 import { handleProcessFrames } from './frameSummaryTask'
 import { handleInitModels } from './gemmaRuntime'
 import { handleTranscribe } from './transcriptionTask'
-import type { ChatPayload, ExtractAudioPayload, ProcessFramesPayload, TranscribePayload, WorkerRequest } from './types'
+import type { ChatPayload, EmbedTextsPayload, ExtractAudioPayload, ProcessFramesPayload, TranscribePayload, WorkerRequest } from './types'
 import { sendResponse } from './workerMessages'
 
 // Single worker entrypoint. Keep this file as a thin router so model, ffmpeg,
@@ -27,6 +28,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       case 'PROCESS_FRAMES':
         await handleProcessFrames(payload as ProcessFramesPayload)
+        break
+      case 'EMBED_TEXTS':
+        await handleEmbedTexts(payload as EmbedTextsPayload)
         break
       default:
         sendResponse({
