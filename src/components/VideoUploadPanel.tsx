@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { RESET_APP_STATE } from '../store'
-import type { MediaKind} from '../store/slices/videoSlice';
-import { setVideoError, setVideoLoading, setVideoReady } from '../store/slices/videoSlice'
+import { setVideoError, setVideoLoading, setVideoReady, type MediaKind } from '../store/slices/videoSlice'
 import { clearAudio, setAudioError, setAudioExtracting, setAudioProgress, setAudioReady } from '../store/slices/audioSlice'
 import { setProcessingError, setProcessingProgress, setProcessingStatus } from '../store/slices/processingSlice'
 import { appendTranscriptSegments, clearContext, setTranscriptError, setTranscriptPhase, setTranscriptProgress, setTranscriptResult, setTranscriptTranscribing } from '../store/slices/contextSlice'
@@ -28,14 +27,13 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
   const transcript = useAppSelector((state) => state.context)
   const modelStatus = useAppSelector((state) => state.model.status)
   const isReady = video.status === 'ready' && video.fileUrl
-  const isAudioInput = video.mediaKind === 'audio'
-  const isVideoInput = video.mediaKind === 'video'
+  const isAudioInput = video.mediaKind === 'audio'; const isVideoInput = video.mediaKind === 'video'
   const isLoading = video.status === 'loading-metadata'
   const isExtractingAudio = audio.status === 'extracting'
   const isTranscribing = transcript.transcriptStatus === 'transcribing'
   const modelReady = modelStatus === 'ready'
   const { frames, isSamplingFrames, sampleFrames, clearFrameArtifacts } = useFrameSampling(settings, activeSessionRef)
-  const { isSummarizingFrames, summarizeFrames } = useFrameSummaries(activeSessionRef)
+  const { isSummarizingFrames, summarizeFrames } = useFrameSummaries(activeSessionRef, settings)
 
   useEffect(() => {
     objectUrlRef.current = video.fileUrl

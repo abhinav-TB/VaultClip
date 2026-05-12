@@ -1,5 +1,5 @@
 import { RawImage } from '@huggingface/transformers'
-import type { ChatMessage, TokenizerLike } from './gemmaRuntime'
+import type { ChatMessage, MessageContent, TokenizerLike } from './gemmaRuntime'
 import { getGenerator } from './gemmaRuntime'
 import type { FrameSummaryInput, FrameSummaryResultItem, ProcessFramesPayload, ProcessFramesResult } from './types'
 import { sendResponse } from './workerMessages'
@@ -7,12 +7,9 @@ import { sendResponse } from './workerMessages'
 const FRAME_SUMMARY_MAX_NEW_TOKENS = 96
 
 /**
- * Summarizes sampled video frames one at a time through Gemma.
+ * Summarizes sampled video frames segment-by-segment through Gemma.
  *
- * Per-frame generation keeps each summary tied to one timestamp and lets the
- * UI render partial results as soon as each image finishes.
- *
- * @param payload - Active media session plus sampled frame data URLs.
+ * @param payload - Active media session, sampled frames, and segment bounds.
  */
 export async function handleProcessFrames(payload: ProcessFramesPayload) {
   if (!payload.sessionId) {
@@ -23,13 +20,22 @@ export async function handleProcessFrames(payload: ProcessFramesPayload) {
     throw new Error('Sample frames before asking Gemma to summarize them.')
   }
 
+  if (!payload.segmentBounds.length) {
+    throw new Error('Segment bounds are missing.')
+  }
+
   const { processor, model } = await getGenerator('PROCESS_FRAMES')
   const tokenizer = (processor.tokenizer || processor) as unknown as TokenizerLike
   const summaries: FrameSummaryResultItem[] = []
   const warnings: string[] = []
 
-  for (const frame of payload.frames) {
-    const progress = Math.round((frame.index / payload.frames.length) * 100)
+  for (let i = 0; i < payload.segmentBounds.length; i++) {
+    const segment = payload.segmentBounds[i]
+    const segmentFrames = payload.frames.filter(f => f.timestamp >= segment.startTime && f.timestamp <= segment.endTime)
+
+    if (segmentFrames.length === 0) continue
+
+    const progress = Math.round((i / payload.segmentBounds.length) * 100)
     sendResponse({
       type: 'PROGRESS',
       taskType: 'PROCESS_FRAMES',
@@ -38,18 +44,18 @@ export async function handleProcessFrames(payload: ProcessFramesPayload) {
     sendResponse({
       type: 'LOG',
       taskType: 'PROCESS_FRAMES',
-      data: `Summarizing frame ${frame.index + 1} of ${payload.frames.length}`,
+      data: `Summarizing segment ${i + 1} of ${payload.segmentBounds.length} (${segmentFrames.length} frames)`,
     })
 
     try {
-      const summary = await summarizeOneFrame(frame, processor, model, tokenizer)
+      const segmentDuration = Math.round(segment.endTime - segment.startTime)
+      const summary = await summarizeSegmentFrames(segmentFrames, segmentDuration, processor, model, tokenizer)
       const result: FrameSummaryResultItem = {
-        frameId: frame.id,
-        index: frame.index,
-        timestamp: frame.timestamp,
-        targetTimestamp: frame.targetTimestamp,
+        segmentId: segment.id,
+        startTime: segment.startTime,
+        endTime: segment.endTime,
         summary,
-        source: 'gemma-frame-summary',
+        source: 'gemma-segment-summary',
       }
 
       summaries.push(result)
@@ -63,7 +69,7 @@ export async function handleProcessFrames(payload: ProcessFramesPayload) {
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      warnings.push(`Frame ${frame.index + 1} could not be summarized: ${message}`)
+      warnings.push(`Segment at ${segment.startTime}s could not be summarized: ${message}`)
     }
   }
 
@@ -87,31 +93,36 @@ export async function handleProcessFrames(payload: ProcessFramesPayload) {
   })
 }
 
-async function summarizeOneFrame(
-  frame: FrameSummaryInput,
+async function summarizeSegmentFrames(
+  frames: FrameSummaryInput[],
+  segmentDuration: number,
   processor: Awaited<ReturnType<typeof getGenerator>>['processor'],
   model: Awaited<ReturnType<typeof getGenerator>>['model'],
   tokenizer: TokenizerLike,
 ) {
-  const rawImage = await RawImage.fromURL(frame.dataUrl)
+  const rawImages = await Promise.all(frames.map(f => RawImage.fromURL(f.dataUrl)))
+  
+  const content: MessageContent = []
+  for (const f of frames) {
+    content.push({ type: 'image', url: f.dataUrl })
+  }
+  content.push({
+    type: 'text',
+    text:
+      `Write a concise visual summary for these video frames representing a continuous ${segmentDuration}-second segment. ` +
+      'Describe only visible facts: readable text, screens, slides, UI state, people, objects, layout, and actions. ' +
+      'Use 1-2 short sentences. Avoid generic openings, markdown, labels, timestamps, and speculation.',
+  })
+
   const messages: ChatMessage[] = [
     {
       role: 'user',
-      content: [
-        { type: 'image', url: frame.dataUrl },
-        {
-          type: 'text',
-          text:
-            'Write a concise visual summary for this sampled video frame. ' +
-            'Describe only visible facts: readable text, screens, slides, UI state, people, objects, layout, and actions. ' +
-            'Use 1-2 short sentences. Avoid generic openings, markdown, labels, timestamps, and speculation.',
-        },
-      ],
+      content,
     },
   ]
   const templatedPrompt = processor.apply_chat_template(messages, { tokenize: false, add_generation_prompt: true })
   const textPrompt = typeof templatedPrompt === 'string' ? templatedPrompt : templatedPrompt.toString()
-  const inputs = await processor(textPrompt, [rawImage], null)
+  const inputs = await processor(textPrompt, rawImages, null)
   const outputTokens = await model.generate({
     ...inputs,
     max_new_tokens: FRAME_SUMMARY_MAX_NEW_TOKENS,

@@ -44,7 +44,6 @@ export const FrameSamplingSection = ({
 }: FrameSamplingSectionProps) => {
   const firstTimestamp = samples[0]?.timestamp ?? null
   const lastTimestamp = samples[samples.length - 1]?.timestamp ?? null
-  const summaryByFrameId = new Map(summaries.map((summary) => [summary.frameId, summary]))
   const canSummarize = samples.length > 0 && !isSampling && !isSummarizing && modelReady
 
   return (
@@ -144,7 +143,7 @@ export const FrameSamplingSection = ({
 
           <div className="grid max-h-80 gap-3 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
             {samples.map((sample) => {
-              const frameSummary = summaryByFrameId.get(sample.id)
+              const frameSummary = summaries.find(s => sample.timestamp >= s.startTime && sample.timestamp <= s.endTime)
 
               return (
                 <figure key={sample.id} className="overflow-hidden rounded-lg border border-gray-800 bg-gray-900/80">

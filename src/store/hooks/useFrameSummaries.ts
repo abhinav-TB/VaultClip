@@ -1,6 +1,8 @@
 import { useCallback, type RefObject } from 'react'
 import { getFrameData } from '../../lib/frameDataRegistry'
+import { buildTimeSegments } from '../../lib/segmentation'
 import { workerClient } from '../../services/workerClient'
+import type { GenerationSettings } from '../../types/generation'
 import type { ProcessFramesPartialResult, ProcessFramesResult } from '../../workers/types'
 import { useAppDispatch, useAppSelector } from '../hooks'
 import { setProcessingError, setProcessingProgress, setProcessingStatus } from '../slices/processingSlice'
@@ -18,7 +20,7 @@ import {
  * Frame image blobs stay in the in-memory registry; the worker receives
  * temporary data URLs because the existing Gemma image path consumes URLs.
  */
-export function useFrameSummaries(activeSessionRef: RefObject<string | null>) {
+export function useFrameSummaries(activeSessionRef: RefObject<string | null>, settings: GenerationSettings) {
   const dispatch = useAppDispatch()
   const video = useAppSelector((state) => state.video)
   const frames = useAppSelector((state) => state.frames)
@@ -26,7 +28,7 @@ export function useFrameSummaries(activeSessionRef: RefObject<string | null>) {
   const isSummarizingFrames = frames.summaryStatus === 'summarizing'
 
   const summarizeFrames = useCallback(async () => {
-    if (!video.sessionId || video.status !== 'ready' || video.mediaKind !== 'video' || frames.status !== 'ready' || isSummarizingFrames || !modelReady) {
+    if (!video.sessionId || video.status !== 'ready' || video.mediaKind !== 'video' || frames.status !== 'ready' || isSummarizingFrames || !modelReady || video.duration === null) {
       return
     }
 
@@ -66,9 +68,16 @@ export function useFrameSummaries(activeSessionRef: RefObject<string | null>) {
         throw new Error('Sampled frame images are no longer available in browser memory. Sample frames again and retry.')
       }
 
+      const segmentBounds = buildTimeSegments(video.duration, settings.transcriptChunkSeconds, settings.transcriptOverlapSeconds).map((s, index) => ({
+        id: `${sessionId}-segment-${index}`,
+        startTime: s.startTime,
+        endTime: s.endTime,
+      }))
+
       const result = await workerClient.runTask<ProcessFramesResult>('PROCESS_FRAMES', {
         sessionId,
         frames: availableFrames,
+        segmentBounds,
       }, (progress) => {
         dispatch(setFrameSummaryProgress({ progress }))
         dispatch(setProcessingProgress(progress))
@@ -106,7 +115,7 @@ export function useFrameSummaries(activeSessionRef: RefObject<string | null>) {
       dispatch(setProcessingError(message))
       dispatch(setProcessingStatus('idle'))
     }
-  }, [activeSessionRef, dispatch, frames.samples, frames.status, frames.summaryProgress, isSummarizingFrames, modelReady, video.mediaKind, video.sessionId, video.status])
+  }, [activeSessionRef, dispatch, frames.samples, frames.status, frames.summaryProgress, isSummarizingFrames, modelReady, settings.transcriptChunkSeconds, settings.transcriptOverlapSeconds, video.duration, video.mediaKind, video.sessionId, video.status])
 
   return {
     isSummarizingFrames,

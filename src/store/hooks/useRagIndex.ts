@@ -20,8 +20,8 @@ export function useRagIndex(settings: GenerationSettings) {
   const transcript = useAppSelector((state) => state.context)
   const frames = useAppSelector((state) => state.frames)
   const rag = useAppSelector((state) => state.rag)
-  const hasTranscript = transcript.transcriptStatus === 'ready' && transcript.transcriptSegments.length > 0
-  const hasFrameSummaries = frames.summaryStatus === 'ready' && frames.summaries.length > 0
+  const hasTranscript = transcript.transcriptSegments.length > 0 && transcript.transcriptStatus !== 'transcribing'
+  const hasFrameSummaries = frames.summaries.length > 0 && frames.summaryStatus !== 'summarizing'
 
   useEffect(() => {
     const sessionId = video.sessionId
@@ -71,13 +71,22 @@ export function useRagIndex(settings: GenerationSettings) {
       return
     }
 
+    let partialDataWarning = null
+    if (transcript.transcriptStatus === 'error' && frames.summaryStatus === 'error') {
+      partialDataWarning = 'Note: Both transcription and frame summarization were interrupted. The index was built successfully with the available context.'
+    } else if (transcript.transcriptStatus === 'error') {
+      partialDataWarning = 'Note: Transcription was interrupted. The index was built successfully with the available spoken context.'
+    } else if (frames.summaryStatus === 'error') {
+      partialDataWarning = 'Note: Frame summarization was interrupted. The index was built successfully with the available visual context.'
+    }
+
     if (settings.retrievalMode === 'lexical') {
       unregisterChunkEmbeddings(activeSessionId)
       dispatch(setRagIndexReady({
         sessionId: activeSessionId,
         chunks,
         embeddingStatus: 'unavailable',
-        warning: 'Lexical-only retrieval is enabled.',
+        warning: partialDataWarning ? `Lexical-only retrieval is enabled. ${partialDataWarning}` : 'Lexical-only retrieval is enabled.',
       }))
       return
     }
@@ -104,7 +113,7 @@ export function useRagIndex(settings: GenerationSettings) {
         sessionId: activeSessionId,
         chunks,
         embeddingStatus: 'ready',
-        warning: null,
+        warning: partialDataWarning,
       }))
     } catch (err) {
       if (previousSessionRef.current !== activeSessionId) return
@@ -120,11 +129,13 @@ export function useRagIndex(settings: GenerationSettings) {
   }, [
     dispatch,
     frames.summaries,
+    frames.summaryStatus,
     hasFrameSummaries,
     hasTranscript,
     settings.embeddingModelId,
     settings.retrievalMode,
     transcript.transcriptSegments,
+    transcript.transcriptStatus,
     video.sessionId,
     video.status,
   ])

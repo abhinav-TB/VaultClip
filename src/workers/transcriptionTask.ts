@@ -11,7 +11,6 @@ const DEFAULT_TRANSCRIPTION_MAX_NEW_TOKENS = 512
 const UNLIMITED_TRANSCRIPTION_MAX_NEW_TOKENS = 4096
 const DEFAULT_TRANSCRIPTION_CHUNK_SECONDS = 30
 const DEFAULT_TRANSCRIPTION_OVERLAP_SECONDS = 0.1
-const OPTIONAL_TAIL_CHUNK_SECONDS = 5
 
 /**
  * Runs manual Gemma transcription for extracted or uploaded audio.
@@ -77,9 +76,6 @@ export async function handleTranscribe(payload: TranscribePayload) {
           rawOutputs,
         })
       } catch (err) {
-        if (!isOptionalTailChunk(chunk, chunks, index) || segments.length === 0) {
-          throw err
-        }
         warnings.push(err instanceof Error ? err.message : `Skipped ${formatTimestamp(chunk.startTime)}-${formatTimestamp(chunk.endTime)} because Gemma did not return usable text.`)
       }
 
@@ -301,9 +297,7 @@ function getTranscriptOverlapSeconds(value: number, chunkSeconds: number) {
   return Math.max(0, Math.min(chunkSeconds - 0.1, Math.round(value * 10) / 10))
 }
 
-function isOptionalTailChunk(chunk: AudioChunk, chunks: AudioChunk[], index: number) {
-  return index === chunks.length - 1 && chunk.endTime - chunk.startTime <= OPTIONAL_TAIL_CHUNK_SECONDS
-}
+
 
 function getAudioExtension(mimeType: string) {
   if (mimeType.includes('flac')) return '.flac'

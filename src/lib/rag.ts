@@ -9,8 +9,6 @@ const STOPWORDS = new Set([
   'which', 'who', 'will', 'with', 'you', 'your',
 ])
 
-const TRANSCRIPT_TARGET_WORDS = 110
-const TRANSCRIPT_MAX_WORDS = 150
 const PROMPT_CONTEXT_BUDGET = 1800
 
 export interface BuildRagChunksInput {
@@ -28,11 +26,35 @@ export interface RetrieveRagInput {
   queryEmbedding?: number[] | null
 }
 
-/** Builds timestamped text chunks from transcript and visual frame summaries. */
+/** Builds timestamped text chunks by combining transcript segments and their visual segment summaries. */
 export function buildRagChunks({ sessionId, transcriptSegments, frameSummaries }: BuildRagChunksInput) {
   const chunks: RagChunk[] = []
-  chunks.push(...buildTranscriptChunks(sessionId, transcriptSegments))
-  chunks.push(...buildFrameSummaryChunks(sessionId, frameSummaries))
+
+  for (const segment of transcriptSegments) {
+    const summaryItem = frameSummaries.find((s) => s.segmentId === segment.id)
+
+    const textParts = []
+    textParts.push(`Transcript:\n${segment.text}`)
+
+    if (summaryItem) {
+      textParts.push(`Visual Summary:\n${summaryItem.summary}`)
+    }
+
+    const text = textParts.join('\n\n')
+
+    chunks.push({
+      id: `${sessionId}-rag-segment-${segment.id}`,
+      sessionId,
+      source: 'mixed',
+      startTime: segment.startTime,
+      endTime: segment.endTime,
+      text,
+      tokensEstimate: estimateTokens(text),
+      keywords: Array.from(new Set(tokenize(text))).slice(0, 24),
+      sourceIds: summaryItem ? [segment.id, summaryItem.segmentId] : [segment.id],
+    })
+  }
+
   return chunks
 }
 
@@ -66,10 +88,7 @@ export function retrieveRagChunks(input: RetrieveRagInput) {
 /** Formats retrieved chunks for the Gemma answer prompt. */
 export function formatRagContext(chunks: RagRetrievedChunk[]) {
   return chunks.map((chunk, index) => {
-    const label = chunk.source === 'frame-summary'
-      ? `${formatTime(chunk.startTime)} frame`
-      : `${formatTime(chunk.startTime)}-${formatTime(chunk.endTime)}`
-    return `[${index + 1}] ${chunk.source} ${label}\n${chunk.text}`
+    return `[${index + 1}] Video Segment (${formatTime(chunk.startTime)}-${formatTime(chunk.endTime)})\n${chunk.text}`
   }).join('\n\n')
 }
 
@@ -81,67 +100,17 @@ export function formatTime(seconds: number) {
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
 }
 
+/**
+ * Provides a rough token count estimate to enforce context window budgets.
+ * 1.35 multiplier approximates the difference between word count and Gemma tokenization.
+ */
 export function estimateTokens(text: string) {
   return Math.ceil(text.split(/\s+/).filter(Boolean).length * 1.35)
 }
 
-function buildTranscriptChunks(sessionId: string, segments: TranscriptSegment[]) {
-  const chunks: RagChunk[] = []
-  let active: TranscriptSegment[] = []
-  let activeWords = 0
 
-  for (const segment of segments) {
-    const words = countWords(segment.text)
-    const previous = active[active.length - 1]
-    const gap = previous ? segment.startTime - previous.endTime : 0
-    const shouldFlush = active.length > 0 && (activeWords >= TRANSCRIPT_TARGET_WORDS || activeWords + words > TRANSCRIPT_MAX_WORDS || gap > 8)
 
-    if (shouldFlush) {
-      chunks.push(createTranscriptChunk(sessionId, chunks.length, active))
-      active = []
-      activeWords = 0
-    }
-
-    active.push(segment)
-    activeWords += words
-  }
-
-  if (active.length > 0) {
-    chunks.push(createTranscriptChunk(sessionId, chunks.length, active))
-  }
-
-  return chunks
-}
-
-function createTranscriptChunk(sessionId: string, index: number, segments: TranscriptSegment[]): RagChunk {
-  const text = segments.map((segment) => segment.text).join(' ')
-  return {
-    id: `${sessionId}-rag-transcript-${index}`,
-    sessionId,
-    source: 'transcript',
-    startTime: segments[0]?.startTime ?? 0,
-    endTime: segments[segments.length - 1]?.endTime ?? segments[0]?.startTime ?? 0,
-    text,
-    tokensEstimate: estimateTokens(text),
-    keywords: Array.from(new Set(tokenize(text))).slice(0, 24),
-    sourceIds: segments.map((segment) => segment.id),
-  }
-}
-
-function buildFrameSummaryChunks(sessionId: string, summaries: FrameSummary[]) {
-  return summaries.map((summary) => ({
-    id: `${sessionId}-rag-frame-${summary.index}`,
-    sessionId,
-    source: 'frame-summary' as const,
-    startTime: summary.timestamp,
-    endTime: summary.timestamp,
-    text: summary.summary,
-    tokensEstimate: estimateTokens(summary.summary),
-    keywords: Array.from(new Set(tokenize(summary.summary))).slice(0, 24),
-    sourceIds: [summary.frameId],
-  }))
-}
-
+/** Normalizes text into a flat array of stemmed tokens, ignoring stopwords and punctuation. */
 function tokenize(text: string) {
   return text
     .toLowerCase()
@@ -151,6 +120,7 @@ function tokenize(text: string) {
     .filter((term) => term.length > 1 && !STOPWORDS.has(term))
 }
 
+/** Applies rudimentary suffix stemming to improve lexical matching for plurals and conjugations. */
 function stem(term: string) {
   return term
     .replace(/'s$/g, '')
@@ -158,6 +128,10 @@ function stem(term: string) {
     .replace(/s$/g, '')
 }
 
+/**
+ * Calculates the number of chunks containing each unique token.
+ * Used for the Inverse Document Frequency (IDF) component of the BM25 algorithm.
+ */
 function getDocumentFrequency(chunks: RagChunk[]) {
   const frequencies = new Map<string, number>()
   for (const chunk of chunks) {
@@ -168,11 +142,16 @@ function getDocumentFrequency(chunks: RagChunk[]) {
   return frequencies
 }
 
+/** Calculates the average token length across all chunks for BM25 normalization. */
 function getAverageLength(chunks: RagChunk[]) {
   if (!chunks.length) return 1
   return chunks.reduce((total, chunk) => total + tokenize(chunk.text).length, 0) / chunks.length
 }
 
+/**
+ * Computes a BM25 relevance score for a chunk against the provided query.
+ * Includes a flat boost if the exact raw query string appears in the chunk.
+ */
 function scoreLexical(chunk: RagChunk, queryTerms: string[], documentFrequency: Map<string, number>, chunkCount: number, averageLength: number, rawQuery: string) {
   const chunkTerms = tokenize(chunk.text)
   const termCounts = new Map<string, number>()
@@ -202,12 +181,14 @@ function scoreLexical(chunk: RagChunk, queryTerms: string[], documentFrequency: 
   return score
 }
 
+/** Retrieves the embedding vector for a chunk and calculates its cosine similarity to the query. */
 function getSemanticScore(sessionId: string | null, modelId: string, chunkId: string, queryEmbedding: number[]) {
   const chunkEmbedding = getChunkEmbedding(sessionId, modelId, chunkId)
   if (!chunkEmbedding) return null
   return cosineSimilarity(queryEmbedding, chunkEmbedding)
 }
 
+/** Normalizes and weighs lexical and semantic scores into a final combined score for ranking. */
 function combineScores(lexicalScore: number, semanticScore: number | null, retrievalMode: RetrievalMode) {
   const normalizedLexical = lexicalScore / (lexicalScore + 2)
   if (retrievalMode === 'hybrid' && semanticScore !== null) {
@@ -217,6 +198,7 @@ function combineScores(lexicalScore: number, semanticScore: number | null, retri
   return normalizedLexical
 }
 
+/** Calculates the cosine similarity (distance) between two vectors. */
 function cosineSimilarity(a: number[], b: number[]) {
   const length = Math.min(a.length, b.length)
   let dot = 0
@@ -231,6 +213,10 @@ function cosineSimilarity(a: number[], b: number[]) {
   return dot / (Math.sqrt(aMagnitude) * Math.sqrt(bMagnitude))
 }
 
+/**
+ * Filters and sorts retrieved chunks to fit within the prompt context window budget.
+ * Guarantees at least 3 chunks if available, up to a maximum of 8, sorted chronologically.
+ */
 function selectPromptChunks(chunks: RagRetrievedChunk[]) {
   const selected: RagRetrievedChunk[] = []
   let budget = 0
@@ -245,6 +231,3 @@ function selectPromptChunks(chunks: RagRetrievedChunk[]) {
   return selected.sort((a, b) => a.startTime - b.startTime)
 }
 
-function countWords(text: string) {
-  return text.split(/\s+/).filter(Boolean).length
-}

@@ -336,6 +336,7 @@ function buildGroundedPrompt(userPrompt: string, retrievedChunks: RagRetrievedCh
 
   return [
     'Answer the user question using the retrieved local media context below.',
+    'Synthesize the context into a single, cohesive response. Do not explicitly say "one segment mentions" or "another segment shows". Write a natural response based on the entire context combined.',
     'Use the provided citation numbers and timestamp ranges when evidence supports the answer.',
     'If the retrieved context is insufficient, say what is missing instead of guessing.',
     '',

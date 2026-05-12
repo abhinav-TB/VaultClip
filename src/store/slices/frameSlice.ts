@@ -18,14 +18,13 @@ export interface FrameSample {
   mimeType: string
 }
 
-/** Gemma-generated visual description tied to one sampled frame. */
+/** Gemma-generated visual description tied to one transcript segment. */
 export interface FrameSummary {
-  frameId: string
-  index: number
-  timestamp: number
-  targetTimestamp: number
+  segmentId: string
+  startTime: number
+  endTime: number
   summary: string
-  source: 'gemma-frame-summary'
+  source: 'gemma-segment-summary'
 }
 
 interface FrameSettingsSnapshot {
@@ -162,13 +161,13 @@ export const frameSlice = createSlice({
     },
     appendFrameSummary: (state, action: PayloadAction<{ sessionId: string; summary: FrameSummary }>) => {
       if (state.sessionId && state.sessionId !== action.payload.sessionId) return
-      const existingIndex = state.summaries.findIndex((summary) => summary.frameId === action.payload.summary.frameId)
+      const existingIndex = state.summaries.findIndex((summary) => summary.segmentId === action.payload.summary.segmentId)
       if (existingIndex >= 0) {
         state.summaries[existingIndex] = action.payload.summary
       } else {
         state.summaries.push(action.payload.summary)
       }
-      state.summaries.sort((a, b) => a.index - b.index)
+      state.summaries.sort((a, b) => a.startTime - b.startTime)
     },
     setFrameSummaryReady: (state, action: PayloadAction<FrameSummaryReadyPayload>) => {
       if (state.sessionId && state.sessionId !== action.payload.sessionId) return
@@ -177,7 +176,7 @@ export const frameSlice = createSlice({
       state.summaryPhase = 'Frame summaries ready'
       state.summaryError = null
       state.summaryWarnings = action.payload.warnings
-      state.summaries = [...action.payload.summaries].sort((a, b) => a.index - b.index)
+      state.summaries = [...action.payload.summaries].sort((a, b) => a.startTime - b.startTime)
     },
     setFrameSummaryError: (state, action: PayloadAction<FrameSummaryErrorPayload>) => {
       state.summaryStatus = 'error'

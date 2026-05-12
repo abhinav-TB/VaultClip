@@ -110,15 +110,15 @@ export interface FrameSummaryInput {
 export interface ProcessFramesPayload {
   sessionId: string
   frames: FrameSummaryInput[]
+  segmentBounds: { id: string; startTime: number; endTime: number }[]
 }
 
 export interface FrameSummaryResultItem {
-  frameId: string
-  index: number
-  timestamp: number
-  targetTimestamp: number
+  segmentId: string
+  startTime: number
+  endTime: number
   summary: string
-  source: 'gemma-frame-summary'
+  source: 'gemma-segment-summary'
 }
 
 export interface ProcessFramesResult {

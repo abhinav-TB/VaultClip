@@ -1,8 +1,7 @@
+import { buildTimeSegments, type TimeSegment } from '../lib/segmentation'
+
 /** Timestamp range sent to Gemma as one transcription input. */
-export interface AudioChunk {
-  startTime: number
-  endTime: number
-}
+export type AudioChunk = TimeSegment
 
 /**
  * Builds fixed transcript chunks with overlap.
@@ -23,20 +22,7 @@ export function buildFixedTranscriptChunks(
   duration: number | null,
   chunkSeconds: number,
   overlapSeconds: number,
-) {
+): AudioChunk[] {
   const audioDuration = duration ?? audio.length / sampleRate
-  const chunks: AudioChunk[] = []
-  let cursor = 0
-
-  while (cursor < audioDuration) {
-    const endTime = Math.min(audioDuration, cursor + chunkSeconds)
-    if (endTime - cursor >= 0.5) {
-      chunks.push({ startTime: cursor, endTime })
-    }
-
-    if (endTime >= audioDuration) break
-    cursor = Math.max(0, endTime - overlapSeconds)
-  }
-
-  return chunks
+  return buildTimeSegments(audioDuration, chunkSeconds, overlapSeconds)
 }
