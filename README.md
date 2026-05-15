@@ -243,8 +243,9 @@ Build output directory: dist
 ```
 
 The repository includes `public/_headers` for the cross-origin isolation headers
-needed by the browser runtime and `public/_redirects` so `/app` works as a React
-Router route after deployment.
+needed by the browser runtime. Workers static asset deployments use
+`wrangler.jsonc` with `not_found_handling: "single-page-application"` so `/app`
+works as a React Router route after deployment.
 
 ## Code Standards
 
