@@ -111,7 +111,7 @@ export function getMediaNextAction(input: MediaNextActionInput): NextActionPanel
       statusLabel: input.isLoading ? 'Preparing upload' : 'Next step',
       title: input.isLoading ? 'Reviewing the selected file' : 'Add your media',
       detail: input.isLoading
-        ? 'Clip Mind is checking duration, format, and metadata before processing begins.'
+        ? 'VaultClip is checking duration, format, and metadata before processing begins.'
         : 'Choose a video or audio file to begin building grounded context.',
       primaryAction: input.isLoading ? undefined : { label: 'Choose File', onClick: input.chooseFile },
     }

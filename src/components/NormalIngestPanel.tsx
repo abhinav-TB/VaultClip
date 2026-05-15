@@ -109,7 +109,7 @@ function getTitle(modelStatus: ModelStatus, buildRunning: boolean, ragReady: boo
 
 function getDetail(modelStatus: ModelStatus, buildRunning: boolean, ragReady: boolean) {
   if (ragReady) return 'The recording is ready for grounded chat with timestamped citations.'
-  if (buildRunning) return 'Clip Mind is preparing the transcript, optional visual context, and retrieval index for this recording.'
+  if (buildRunning) return 'VaultClip is preparing the transcript, optional visual context, and retrieval index for this recording.'
   if (modelStatus === 'ready') return 'The local model is ready. Build the index to unlock grounded chat for this recording.'
   return 'The model runs locally in your browser. Load it once before building the index.'
 }

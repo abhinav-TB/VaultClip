@@ -38,9 +38,17 @@ function App() {
     <div className={`flex min-h-screen flex-col bg-gray-950 font-sans text-gray-100 selection:bg-blue-500/30 ${ragReady ? 'lg:h-screen lg:overflow-hidden' : ''}`}>
       <header className="sticky top-0 z-10 border-b border-gray-800 bg-gray-950/90 p-4 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4">
-          <h1 className="text-2xl font-black tracking-normal text-gray-100">
-            CLIP MIND
-          </h1>
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600/20 border border-blue-500/30">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" />
+              </svg>
+            </div>
+            <h1 className="text-xl font-black tracking-tight text-gray-100">
+              VAULT<span className="text-blue-400">CLIP</span>
+            </h1>
+          </div>
           <div className="flex items-center gap-3 text-xs font-medium text-gray-500">
             <ModelRuntimeStatus />
             <button

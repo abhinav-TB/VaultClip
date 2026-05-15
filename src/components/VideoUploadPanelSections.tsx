@@ -77,7 +77,7 @@ export const MediaDropZone = ({ settings, onChoose, onFiles }: MediaDropZoneProp
     </div>
     <p className="text-xl font-bold tracking-tight text-gray-100">Add a recording to begin</p>
     <p className="mt-3 max-w-sm text-sm leading-6 text-gray-500">
-      Drop in a video or audio file, or browse from your computer. Clip Mind checks the file before preparing context.
+      Drop in a video or audio file, or browse from your computer. VaultClip checks the file before preparing context.
     </p>
     <div className="mt-6 rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-950/30 transition-colors hover:bg-blue-500">
       Choose File

@@ -1,6 +1,6 @@
-# Clip Mind
+# VaultClip
 
-Clip Mind is a browser-only media workflow for selecting a local video or audio
+VaultClip is a browser-only media workflow for selecting a local video or audio
 file, previewing it, producing transcription-ready audio, generating a
 timestamped Gemma transcript, and using the transcript for local chat/Q&A.
 

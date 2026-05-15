@@ -30,7 +30,7 @@ As of this spike, `onnx-community/gemma-4-E2B-it-ONNX` handles perfectly inside 
 **Root Cause of Prior Failures:** It had nothing to do with architectural incompatibility; it was simply naive error swallowing by the worker client when Transformers.js encountered an unauthorized HTTP request for a strictly gated model variant.
 
 ### Confirmed MVP Scope
-We can continue building **Clip Mind** solely in the browser exactly as envisioned!
+We can continue building **VaultClip** solely in the browser exactly as envisioned!
 1. **Unified Pipeline**: We have verified the pipeline can shoulder heavy, locally cached Multimodal/LLM payloads.
 2. **Offline Capable**: Since the weights cached perfectly, we can proceed with a true privacy-first, zero-api architecture. 
 

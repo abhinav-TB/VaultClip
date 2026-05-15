@@ -1,7 +1,7 @@
-# Clip Mind Agent Notes
+# VaultClip Agent Notes
 
 These instructions are shared repo context for Codex-style coding agents working
-on Clip Mind.
+on VaultClip.
 
 ## Product Focus
 
