@@ -4,6 +4,12 @@
 
 @layer base {
   body {
-    @apply bg-gray-900 font-sans text-gray-100 antialiased;
+    @apply bg-slate-900 font-sans text-slate-100 antialiased;
+  }
+}
+
+@layer utilities {
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400;
   }
 }

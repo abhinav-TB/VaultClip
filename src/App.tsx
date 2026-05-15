@@ -1,16 +1,12 @@
 import { useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
-import { GemmaChat } from './components/GemmaChat'
-import { ModelRuntimeStatus } from './components/ModelRuntimeStatus'
-import { SettingsModal } from './components/SettingsModal'
-import { VideoUploadPanel } from './components/VideoUploadPanel'
-import { WorkflowStep } from './components/WorkflowStep'
-import { getWorkflowState } from './lib/workflowUi'
 import { useAppSelector } from './store/hooks'
 import type { GenerationSettings } from './types/generation'
+import LandingPage from './pages/LandingPage'
+import { AppPage } from './pages/AppPage'
+import { LandingLayout, AppLayout } from './pages/Layout'
 
 function App() {
-  const workflow = useAppSelector(getWorkflowState)
   const ragReady = useAppSelector((state) => state.rag.status === 'ready')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [generationSettings, setGenerationSettings] = useState<GenerationSettings>({
@@ -35,86 +31,22 @@ function App() {
   })
 
   return (
-    <div className={`flex min-h-screen flex-col bg-gray-950 font-sans text-gray-100 selection:bg-blue-500/30 ${ragReady ? 'lg:h-screen lg:overflow-hidden' : ''}`}>
-      <header className="sticky top-0 z-10 border-b border-gray-800 bg-gray-950/90 p-4 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600/20 border border-blue-500/30">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" />
-              </svg>
-            </div>
-            <h1 className="text-xl font-black tracking-tight text-gray-100">
-              VAULT<span className="text-blue-400">CLIP</span>
-            </h1>
-          </div>
-          <div className="flex items-center gap-3 text-xs font-medium text-gray-500">
-            <ModelRuntimeStatus />
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="rounded-lg border border-gray-800 bg-gray-950 p-2 text-gray-400 transition-colors hover:border-gray-700 hover:bg-gray-900 hover:text-white"
-              aria-label="Open settings"
-              title="Settings"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {settingsOpen && (
-        <SettingsModal
-          settings={generationSettings}
-          onChange={setGenerationSettings}
-          onClose={() => setSettingsOpen(false)}
-        />
-      )}
-
-      <main className={`flex flex-1 flex-col items-center px-4 py-6 sm:px-6 lg:py-8 ${ragReady ? 'lg:min-h-0 lg:overflow-hidden' : ''}`}>
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <div className={`flex w-full max-w-[1500px] flex-col gap-6 ${ragReady ? 'lg:min-h-0 lg:flex-1' : ''}`}>
-                <section className="grid gap-5 lg:grid-cols-[minmax(0,0.78fr)_minmax(620px,1.22fr)] lg:items-end">
-                  <div className="max-w-2xl">
-                    <p className="text-xs font-bold uppercase tracking-wide text-blue-400">Private media workspace</p>
-                    <h2 className="mt-3 text-3xl font-black tracking-normal text-gray-100 sm:text-4xl">Analyze recordings with a clear, local workflow.</h2>
-                    <p className="mt-3 text-base leading-7 text-gray-500">
-                      {workflow.summary}
-                    </p>
-                  </div>
-                  <div className="grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
-                    {workflow.steps.map((step) => (
-                      <WorkflowStep key={step.label} state={step.state} label={step.label} detail={step.detail} />
-                    ))}
-                  </div>
-                </section>
-                {generationSettings.experienceMode === 'normal' && !ragReady ? (
-                  <section className="mx-auto w-full max-w-5xl">
-                    <VideoUploadPanel settings={generationSettings} />
-                  </section>
-                ) : (
-                  <section className="grid w-full gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1.28fr)_minmax(480px,0.92fr)] lg:items-start lg:overflow-hidden">
-                    <VideoUploadPanel settings={generationSettings} />
-                    <GemmaChat settings={generationSettings} />
-                  </section>
-                )}
-              </div>
-            }
+    <Routes>
+      <Route path="/" element={<LandingLayout><LandingPage /></LandingLayout>} />
+      <Route
+        path="/app"
+        element={
+          <AppLayout
+            settings={generationSettings}
+            onSettingsChange={setGenerationSettings}
+            settingsOpen={settingsOpen}
+            onSettingsClose={() => setSettingsOpen(false)}
           />
-        </Routes>
-      </main>
-
-      <footer className="border-t border-gray-900 p-6 text-center text-xs font-bold uppercase tracking-wide text-gray-600">
-        Built with Gemma
-      </footer>
-    </div>
+        }
+      >
+        <Route index element={<AppPage ragReady={ragReady} settings={generationSettings} />} />
+      </Route>
+    </Routes>
   )
 }
 

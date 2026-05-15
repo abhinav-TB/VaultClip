@@ -21,7 +21,7 @@ export const NormalMediaSummary = ({
   warnings: string[]
 }) => (
   <div className="space-y-4">
-    <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-950/50">
+    <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950/50">
       <MediaPreview mediaKind={mediaKind} fileUrl={fileUrl} />
     </div>
     <MediaMetadataGrid mediaKind={mediaKind} name={name} size={size} duration={duration} type={type} sessionId={sessionId} />

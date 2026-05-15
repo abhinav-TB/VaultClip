@@ -45,7 +45,7 @@ export const ContextPrepPanel = ({
   experienceMode: 'normal' | 'power'
   onBuildIndex: () => void
 }) => (
-  <div className="shrink-0 border-b border-gray-800 bg-gray-950/60 p-4">
+  <div className="shrink-0 border-b border-slate-800 bg-slate-950/60 p-4">
     <ContextIndexStatus
       status={status}
       embeddingStatus={embeddingStatus}
@@ -98,7 +98,7 @@ const ChatReadinessNotice = ({
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-gray-800 bg-gray-900/70 px-3 py-2 text-xs leading-5 text-gray-500">
+    <div className="mt-3 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs leading-5 text-slate-500">
       {getChatBlockedMessage(modelReady, contextReady, canBuildIndex)}
     </div>
   )
@@ -166,19 +166,19 @@ const ContextIndexStatus = ({
       ? 'bg-green-500'
       : indexing
         ? 'bg-cyan-400 animate-pulse'
-        : 'bg-gray-500'
+        : 'bg-slate-500'
 
   return (
-    <div className="rounded-lg border border-gray-800 bg-gray-950/70 px-3 py-3 text-xs text-gray-500">
+    <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-xs text-slate-500">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className={`h-2 w-2 rounded-full ${dotClass}`} />
-            <span className="font-semibold text-gray-300">{title}</span>
+            <span className="font-semibold text-slate-300">{title}</span>
           </div>
-          <p className="mt-1 leading-5 text-gray-500">{detail}</p>
+          <p className="mt-1 leading-5 text-slate-500">{detail}</p>
         </div>
-        <span className="shrink-0 rounded-md border border-gray-800 bg-gray-900 px-2 py-1 font-bold uppercase tracking-wide text-gray-500">
+        <span className="shrink-0 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 font-bold uppercase tracking-wide text-slate-500">
           {getRetrievalLabel(retrievalMode, embeddingStatus)}
         </span>
       </div>
@@ -191,13 +191,13 @@ const ContextIndexStatus = ({
         <button
           type="button"
           onClick={onBuildIndex}
-          className="mt-3 w-full rounded-lg border border-cyan-500/40 bg-cyan-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:bg-cyan-500 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800 disabled:text-gray-500"
+          className="mt-3 w-full rounded-lg border border-cyan-500/40 bg-cyan-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:bg-cyan-500 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
         >
           {ready ? 'Rebuild Context Index' : 'Build Context Index'}
         </button>
       )}
       {status === 'indexing' && (
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-800">
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
           <div className="h-full bg-cyan-500 transition-all duration-500" style={{ width: `${progress}%` }} />
         </div>
       )}

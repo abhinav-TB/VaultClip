@@ -10,7 +10,7 @@ interface RagSettingsSectionProps {
 /** Retrieval controls for timestamped media Q&A. */
 export const RagSettingsSection = ({ settings, onChange }: RagSettingsSectionProps) => (
   <div className="space-y-4">
-    <div className="grid gap-2 rounded-lg border border-gray-800 bg-gray-900/60 p-1 text-xs font-bold sm:grid-cols-2">
+    <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-1 text-xs font-bold sm:grid-cols-2">
       <RetrievalModeButton
         active={settings.retrievalMode === 'hybrid'}
         title="Hybrid"
@@ -26,7 +26,7 @@ export const RagSettingsSection = ({ settings, onChange }: RagSettingsSectionPro
     </div>
 
     <div className="space-y-2">
-      <label htmlFor="settings-embedding-model" className="text-sm font-medium text-gray-200">
+      <label htmlFor="settings-embedding-model" className="text-sm font-medium text-slate-200">
         Embedding model
       </label>
       <input
@@ -38,9 +38,9 @@ export const RagSettingsSection = ({ settings, onChange }: RagSettingsSectionPro
           const modelId = event.target.value.trim() || DEFAULT_EMBEDDING_MODEL
           onChange({ ...settings, embeddingModelId: modelId })
         }}
-        className="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 font-mono text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+        className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs text-slate-200 focus:outline-none focus:border-blue-500"
       />
-      <p className="text-xs leading-5 text-gray-500">
+      <p className="text-xs leading-5 text-slate-500">
         Default: {DEFAULT_EMBEDDING_MODEL}. Custom models must support Transformers.js feature extraction or sentence embeddings.
       </p>
     </div>
@@ -63,11 +63,11 @@ const RetrievalModeButton = ({
     onClick={onClick}
     className={`rounded-md px-3 py-2 text-left transition-colors ${
       active
-        ? 'border border-blue-500/40 bg-blue-500/15 text-blue-100'
-        : 'text-gray-500 hover:bg-gray-800 hover:text-gray-300'
+        ? 'border border-purple-500/40 bg-purple-500/15 text-purple-100'
+        : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'
     }`}
   >
     {title}
-    <span className="mt-1 block text-[10px] font-medium text-gray-500">{description}</span>
+    <span className="mt-1 block text-[10px] font-medium text-slate-500">{description}</span>
   </button>
 )

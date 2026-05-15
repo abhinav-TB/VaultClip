@@ -38,12 +38,12 @@ export const NormalIngestPanel = ({
   const disabled = modelLoading || buildRunning || ragReady
 
   return (
-    <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-5">
+    <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-blue-300">Next step</p>
-          <h3 className="mt-1 text-xl font-bold text-gray-100">{getTitle(modelStatus, buildRunning, ragReady)}</h3>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100/70">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-purple-300">Next step</p>
+          <h3 className="mt-1 text-xl font-bold text-slate-100">{getTitle(modelStatus, buildRunning, ragReady)}</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-purple-100/70">
             {getDetail(modelStatus, buildRunning, ragReady)}
           </p>
         </div>
@@ -52,7 +52,7 @@ export const NormalIngestPanel = ({
             type="button"
             onClick={primaryAction}
             disabled={disabled}
-            className="shrink-0 rounded-lg border border-blue-500/50 bg-blue-600 px-5 py-3 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800 disabled:text-gray-500"
+            className="shrink-0 rounded-lg border border-purple-500/50 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 px-5 py-3 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
           >
             {primaryLabel}
           </button>
@@ -63,11 +63,11 @@ export const NormalIngestPanel = ({
         <label className={`mt-4 flex items-center justify-between gap-4 rounded-lg border px-4 py-3 text-sm ${
           audioOnlyIndex
             ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-50'
-            : 'border-gray-800 bg-gray-950/50 text-gray-300'
+            : 'border-slate-800 bg-slate-950/50 text-slate-300'
         }`}>
           <span className="min-w-0">
             <span className="block font-semibold">Audio-only index</span>
-            <span className="mt-1 block text-xs leading-5 text-gray-500">
+            <span className="mt-1 block text-xs leading-5 text-slate-500">
               {audioOnlyLocked
                 ? 'Audio files always use transcript-only indexing.'
                 : 'Skip visual frame summaries and build the index from the transcript only.'}
@@ -78,7 +78,7 @@ export const NormalIngestPanel = ({
             checked={audioOnlyIndex}
             disabled={audioOnlyLocked || buildRunning}
             onChange={(event) => onAudioOnlyIndexChange(event.target.checked)}
-            className="h-5 w-5 shrink-0 rounded border-gray-700 bg-gray-950 text-cyan-500 focus:ring-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-5 w-5 shrink-0 rounded border-slate-700 bg-slate-950 text-cyan-500 focus:ring-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
           />
         </label>
       )}
@@ -87,7 +87,7 @@ export const NormalIngestPanel = ({
         <ProgressBar
           progress={buildRunning ? buildProgress : modelProgress}
           phase={buildRunning ? buildPhase : 'Loading local model'}
-          colorClass={buildRunning ? 'bg-cyan-500' : 'bg-blue-500'}
+          colorClass={buildRunning ? 'bg-cyan-500' : 'bg-purple-500'}
         />
       )}
 
@@ -117,11 +117,11 @@ function getDetail(modelStatus: ModelStatus, buildRunning: boolean, ragReady: bo
 const ProgressBar = ({ progress, phase, colorClass }: { progress: number; phase: string; colorClass: string }) => (
   <div className="mt-4 space-y-2">
     <div className="flex items-center gap-3">
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-800">
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-800">
         <div className={`h-full transition-all duration-500 ${colorClass}`} style={{ width: `${progress}%` }} />
       </div>
-      <span className="w-10 text-right font-mono text-xs text-gray-400">{progress}%</span>
+      <span className="w-10 text-right font-mono text-xs text-slate-400">{progress}%</span>
     </div>
-    <p className="text-xs text-gray-500">{phase}</p>
+    <p className="text-xs text-slate-500">{phase}</p>
   </div>
 )

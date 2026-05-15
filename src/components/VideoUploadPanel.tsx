@@ -403,7 +403,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
     }
   }
   return (
-    <div className="flex min-h-[560px] w-full flex-col overflow-hidden rounded-lg border border-gray-800 bg-gray-900 shadow-2xl lg:h-full lg:min-h-0">
+    <div className="flex min-h-[560px] w-full flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-900 shadow-2xl lg:h-full lg:min-h-0">
       <HiddenMediaInput inputRef={inputRef} onFiles={(files) => void handleFiles(files)} />
       <MediaPanelHeader isReady={Boolean(isReady)} isLoading={isLoading} status={video.status} />
       <div className="flex flex-1 flex-col gap-4 p-5 lg:min-h-0 lg:overflow-y-auto">
