@@ -149,7 +149,7 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
       })
     } catch (err) {
       console.error('Chat failed:', err)
-      setMessages(prev => [...prev, { role: 'ai', content: '[Error: Local Inference failed]' }])
+      setMessages(prev => [...prev, { role: 'ai', content: '[Error: Inference failed. The model may need to be reloaded or your browser needs a restart.]' }])
     }
   }
 

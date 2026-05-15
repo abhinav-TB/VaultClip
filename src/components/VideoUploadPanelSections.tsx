@@ -238,12 +238,15 @@ export const MediaErrorNotice = ({ error, name, size }: MediaErrorNoticeProps) =
 
 export const VideoWarnings = ({ warnings }: { warnings: string[] }) => (
   <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
-    <p className="text-sm font-semibold text-yellow-100">Close to the current processing limit</p>
+    <p className="text-sm font-semibold text-yellow-100">Approaching processing limit</p>
     <ul className="mt-2 space-y-1 text-sm leading-6 text-yellow-100/80">
       {warnings.map((warning) => (
         <li key={warning}>{warning}</li>
       ))}
     </ul>
+    <p className="mt-2 text-xs text-yellow-100/60">
+      You can increase or remove limits in the Settings panel.
+    </p>
   </div>
 )
 

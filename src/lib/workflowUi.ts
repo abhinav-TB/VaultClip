@@ -101,7 +101,7 @@ export function getMediaNextAction(input: MediaNextActionInput): NextActionPanel
     return {
       statusLabel: 'Needs attention',
       title: 'Select a supported media file',
-      detail: 'The selected file could not be processed. Choose a supported video or audio file within the current limits.',
+      detail: 'The selected file could not be processed. Adjust your limits in Settings, or choose a supported video or audio file within the current limits.',
       primaryAction: { label: 'Replace File', onClick: input.chooseFile },
     }
   }

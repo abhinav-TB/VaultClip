@@ -169,7 +169,7 @@ export function useNormalIngest(
       }
 
       if (!segments.length) {
-        throw new Error('No transcript segments were created. Try another file or switch to Power User mode for details.')
+        throw new Error('No transcript segments were created. Try a different file, or switch to Power User mode for troubleshooting details.')
       }
 
       let frameSummaries: FrameSummary[] = []

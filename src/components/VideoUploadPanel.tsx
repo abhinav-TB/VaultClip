@@ -97,7 +97,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       dispatch(clearAudio())
       dispatch(clearContext())
       dispatch(setVideoError({
-        message: sizeRejection || durationRejection || 'This video exceeds the configured MVP processing budget.',
+        message: sizeRejection || durationRejection || 'This file exceeds your configured processing limit. Adjust the limits in Settings, or choose a smaller file.',
         name: video.name ?? undefined,
         mediaKind: video.mediaKind ?? undefined,
         size: video.size ?? undefined,

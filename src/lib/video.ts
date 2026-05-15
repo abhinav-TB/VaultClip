@@ -52,7 +52,7 @@ export function getFileSizeRejectionForBytes(size: number | null, settings: Vide
   const maxBytes = settings.maxVideoSizeMb * 1024 * 1024
   if (size <= maxBytes) return null
 
-  return `This file is ${(size / (1024 * 1024)).toFixed(1)} MB, which exceeds the ${settings.maxVideoSizeMb} MB MVP limit.`
+  return `This file is ${(size / (1024 * 1024)).toFixed(1)} MB, which exceeds the ${settings.maxVideoSizeMb} MB limit. You can increase or remove this limit in Settings.`
 }
 
 /**
@@ -65,7 +65,7 @@ export function getDurationRejection(duration: number | null, settings: VideoBud
   const maxSeconds = settings.maxVideoDurationMinutes * 60
   if (duration <= maxSeconds) return null
 
-  return `This file is ${formatVideoBudgetDuration(duration)}, which exceeds the ${settings.maxVideoDurationMinutes} minute MVP limit.`
+  return `This file is ${formatVideoBudgetDuration(duration)}, which exceeds the ${settings.maxVideoDurationMinutes} minute limit. You can increase or remove this limit in Settings.`
 }
 
 /** Builds non-blocking warnings for an accepted file near configured limits. */
