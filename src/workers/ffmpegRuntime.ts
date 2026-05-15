@@ -3,9 +3,10 @@ import type { WorkerRequest } from './types'
 import { sendResponse } from './workerMessages'
 import ffmpegClassWorkerURL from '../../node_modules/@ffmpeg/ffmpeg/dist/esm/worker.js?url'
 import ffmpegCoreURL from '../../node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js?url'
-import ffmpegWasmURL from '../../node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm?url'
 
 let ffmpeg: FFmpeg | null = null
+
+const DEFAULT_FFMPEG_WASM_URL = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.wasm'
 
 /**
  * Loads and returns the shared ffmpeg.wasm instance for worker media tasks.
@@ -34,7 +35,7 @@ export async function getFFmpeg(taskType: WorkerRequest['type']) {
   await ffmpeg.load({
     classWorkerURL: ffmpegClassWorkerURL,
     coreURL: ffmpegCoreURL,
-    wasmURL: ffmpegWasmURL,
+    wasmURL: getFFmpegWasmUrl(),
   })
 
   sendResponse({
@@ -44,6 +45,13 @@ export async function getFFmpeg(taskType: WorkerRequest['type']) {
   })
 
   return ffmpeg
+}
+
+function getFFmpegWasmUrl() {
+  const hostedWasmUrl = import.meta.env.VITE_FFMPEG_WASM_URL?.trim()
+  if (hostedWasmUrl) return hostedWasmUrl
+
+  return DEFAULT_FFMPEG_WASM_URL
 }
 
 /**

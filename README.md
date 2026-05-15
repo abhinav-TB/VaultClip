@@ -203,6 +203,49 @@ npm run check
 
 `npm run check` runs lint, repository standards checks, and the production build.
 
+## Cloudflare Pages Deployment
+
+VaultClip can deploy as a static Vite app on Cloudflare Pages, but
+`ffmpeg-core.wasm` is larger than Cloudflare Pages' per-asset limit. Host that
+single WASM file from Cloudflare R2 and point the app at it during the Pages
+build.
+
+1. Create an R2 bucket, for example `vaultclip-assets`.
+2. Upload `node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm` as
+   `ffmpeg/ffmpeg-core.wasm` with content type `application/wasm`.
+3. Expose the bucket through a custom domain, for example
+   `https://assets.example.com`.
+4. Configure R2 CORS to allow the Pages app origin:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://vaultclip.pages.dev", "https://your-domain.com"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 86400
+  }
+]
+```
+
+5. In Cloudflare Pages, set the production environment variable:
+
+```text
+VITE_FFMPEG_WASM_URL=https://assets.example.com/ffmpeg/ffmpeg-core.wasm
+```
+
+6. Use these Pages build settings:
+
+```text
+Build command: npm run build
+Build output directory: dist
+```
+
+The repository includes `public/_headers` for the cross-origin isolation headers
+needed by the browser runtime and `public/_redirects` so `/app` works as a React
+Router route after deployment.
+
 ## Code Standards
 
 See `CONTRIBUTING.md` for the full standard. Key rules:
