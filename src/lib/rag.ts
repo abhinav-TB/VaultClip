@@ -1,6 +1,7 @@
 import type { TranscriptSegment } from '../store/slices/contextSlice'
 import type { FrameSummary } from '../store/slices/frameSlice'
 import type { RagChunk, RagRetrievedChunk, RetrievalMode } from '../store/slices/ragSlice'
+import type { MediaKind } from '../store/slices/videoSlice'
 import { getChunkEmbedding } from './ragEmbeddingRegistry'
 
 const STOPWORDS = new Set([
@@ -86,9 +87,10 @@ export function retrieveRagChunks(input: RetrieveRagInput) {
 }
 
 /** Formats retrieved chunks for the Gemma answer prompt. */
-export function formatRagContext(chunks: RagRetrievedChunk[]) {
+export function formatRagContext(chunks: RagRetrievedChunk[], mediaKind: MediaKind | null = null) {
+  const segmentLabel = mediaKind === 'audio' ? 'Audio Segment' : mediaKind === 'video' ? 'Video Segment' : 'Media Segment'
   return chunks.map((chunk, index) => {
-    return `[${index + 1}] Video Segment (${formatTime(chunk.startTime)}-${formatTime(chunk.endTime)})\n${chunk.text}`
+    return `[${index + 1}] ${segmentLabel} (${formatTime(chunk.startTime)}-${formatTime(chunk.endTime)})\n${chunk.text}`
   }).join('\n\n')
 }
 
@@ -230,4 +232,3 @@ function selectPromptChunks(chunks: RagRetrievedChunk[]) {
 
   return selected.sort((a, b) => a.startTime - b.startTime)
 }
-

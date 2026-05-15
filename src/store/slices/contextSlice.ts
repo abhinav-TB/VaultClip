@@ -90,6 +90,9 @@ export const contextSlice = createSlice({
       state.transcriptPhase = null
       state.transcriptError = action.payload
       state.transcriptWarnings = []
+      state.transcriptSegments = []
+      state.transcript = ''
+      state.transcriptRawText = ''
     },
     appendTranscriptSegment: (state, action: PayloadAction<string>) => {
       state.transcript += (state.transcript ? ' ' : '') + action.payload

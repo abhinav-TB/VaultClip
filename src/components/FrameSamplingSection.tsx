@@ -47,7 +47,7 @@ export const FrameSamplingSection = ({
   const canSummarize = samples.length > 0 && !isSampling && !isSummarizing && modelReady
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-4">
+    <div className="rounded-lg border border-gray-800 bg-gray-950/70 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-gray-100">Frame samples</p>

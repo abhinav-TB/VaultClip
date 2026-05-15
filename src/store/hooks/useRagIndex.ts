@@ -58,6 +58,7 @@ export function useRagIndex(settings: GenerationSettings) {
       sessionId: activeSessionId,
       retrievalMode: settings.retrievalMode,
       embeddingModelId: settings.embeddingModelId,
+      startedAtMs: Date.now(),
     }))
 
     const chunks = buildRagChunks({
@@ -87,6 +88,7 @@ export function useRagIndex(settings: GenerationSettings) {
         chunks,
         embeddingStatus: 'unavailable',
         warning: partialDataWarning ? `Lexical-only retrieval is enabled. ${partialDataWarning}` : 'Lexical-only retrieval is enabled.',
+        completedAtMs: Date.now(),
       }))
       return
     }
@@ -114,6 +116,7 @@ export function useRagIndex(settings: GenerationSettings) {
         chunks,
         embeddingStatus: 'ready',
         warning: partialDataWarning,
+        completedAtMs: Date.now(),
       }))
     } catch (err) {
       if (previousSessionRef.current !== activeSessionId) return
@@ -124,6 +127,7 @@ export function useRagIndex(settings: GenerationSettings) {
         chunks,
         embeddingStatus: 'error',
         warning: `Embedding model failed to load. Using lexical retrieval only. ${err instanceof Error ? err.message : String(err)}`,
+        completedAtMs: Date.now(),
       }))
     }
   }, [

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { GenerationSettings } from '../types/generation'
 import { clampFrameImageQuality, clampFrameIntervalSeconds, clampFrameMaxWidth, clampMaxFrameSamples, clampTargetFrameCount, clampTokenLimit, clampTranscriptChunkSeconds, clampTranscriptOverlapSeconds, clampVideoDurationLimit, clampVideoSizeLimit, formatAudioSampleRate } from '../lib/format'
+import { ExperienceModeSection } from './ExperienceModeSection'
 import { RagSettingsSection } from './RagSettingsSection'
 
 const AUDIO_SAMPLE_RATES = [16000, 24000, 48000] as const
@@ -60,6 +61,13 @@ export const SettingsModal = ({
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto p-5">
+        <SettingsSectionTitle
+          title="Experience"
+          description="Normal mode keeps the main workflow simple. Power User mode exposes each processing step."
+        />
+
+        <ExperienceModeSection settings={settings} onChange={onChange} />
+
         <SettingsSectionTitle
           title="Chat"
           description="Controls replies in the private chat panel only."

@@ -1,4 +1,5 @@
 export interface GenerationSettings {
+  experienceMode: 'normal' | 'power'
   maxNewTokens: number
   retrievalMode: 'hybrid' | 'lexical'
   embeddingModelId: string

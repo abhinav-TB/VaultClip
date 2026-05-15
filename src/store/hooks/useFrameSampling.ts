@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import { clearFrameData, registerFrameData } from '../../lib/frameDataRegistry'
-import { sampleVideoFrames } from '../../lib/frameSampler'
+import { sampleVideoFrames, type SampledFrameBlob } from '../../lib/frameSampler'
 import { setProcessingError, setProcessingProgress, setProcessingStatus } from '../slices/processingSlice'
 import { clearFrames, setFrameSamplingError, setFrameSamplingProgress, setFrameSamplingReady, setFrameSamplingStarted, type FrameSample } from '../slices/frameSlice'
 import type { GenerationSettings } from '../../types/generation'
@@ -29,6 +29,37 @@ export function useFrameSampling(settings: GenerationSettings, activeSessionRef:
   }, [dispatch])
 
   useEffect(() => clearFrameArtifacts, [clearFrameArtifacts])
+
+  const registerSampledFrames = useCallback((sessionId: string, sampledFrames: SampledFrameBlob[]) => {
+    const samples: FrameSample[] = sampledFrames.map((sample) => {
+      const id = `${sessionId}-frame-${sample.index}`
+      const objectUrl = URL.createObjectURL(sample.blob)
+      frameObjectUrlsRef.current.push(objectUrl)
+      registerFrameData(sessionId, id, {
+        blob: sample.blob,
+        timestamp: sample.timestamp,
+        targetTimestamp: sample.targetTimestamp,
+        width: sample.width,
+        height: sample.height,
+        mimeType: sample.mimeType,
+      })
+
+      return {
+        id,
+        index: sample.index,
+        timestamp: sample.timestamp,
+        targetTimestamp: sample.targetTimestamp,
+        objectUrl,
+        width: sample.width,
+        height: sample.height,
+        size: sample.size,
+        mimeType: sample.mimeType,
+      }
+    })
+
+    dispatch(setFrameSamplingReady({ sessionId, samples }))
+    return samples
+  }, [dispatch])
 
   const sampleFrames = useCallback(async () => {
     if (!video.sessionId || video.status !== 'ready' || video.mediaKind !== 'video' || !video.fileUrl || !video.duration || isSamplingFrames) {
@@ -68,33 +99,7 @@ export function useFrameSampling(settings: GenerationSettings, activeSessionRef:
         return
       }
 
-      const samples: FrameSample[] = sampledFrames.map((sample) => {
-        const id = `${sessionId}-frame-${sample.index}`
-        const objectUrl = URL.createObjectURL(sample.blob)
-        frameObjectUrlsRef.current.push(objectUrl)
-        registerFrameData(sessionId, id, {
-          blob: sample.blob,
-          timestamp: sample.timestamp,
-          targetTimestamp: sample.targetTimestamp,
-          width: sample.width,
-          height: sample.height,
-          mimeType: sample.mimeType,
-        })
-
-        return {
-          id,
-          index: sample.index,
-          timestamp: sample.timestamp,
-          targetTimestamp: sample.targetTimestamp,
-          objectUrl,
-          width: sample.width,
-          height: sample.height,
-          size: sample.size,
-          mimeType: sample.mimeType,
-        }
-      })
-
-      dispatch(setFrameSamplingReady({ sessionId, samples }))
+      registerSampledFrames(sessionId, sampledFrames)
       dispatch(setProcessingStatus('complete'))
       dispatch(setProcessingProgress(100))
       dispatch(setProcessingError(''))
@@ -105,12 +110,13 @@ export function useFrameSampling(settings: GenerationSettings, activeSessionRef:
       dispatch(setProcessingError(message))
       dispatch(setProcessingStatus('idle'))
     }
-  }, [activeSessionRef, clearFrameArtifacts, dispatch, isSamplingFrames, settings, video.duration, video.fileUrl, video.mediaKind, video.sessionId, video.status])
+  }, [activeSessionRef, clearFrameArtifacts, dispatch, isSamplingFrames, registerSampledFrames, settings, video.duration, video.fileUrl, video.mediaKind, video.sessionId, video.status])
 
   return {
     frames,
     isSamplingFrames,
     sampleFrames,
     clearFrameArtifacts,
+    registerSampledFrames,
   }
 }

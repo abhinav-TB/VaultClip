@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { RESET_APP_STATE } from '../store'
 import { setVideoError, setVideoLoading, setVideoReady, type MediaKind } from '../store/slices/videoSlice'
@@ -8,33 +8,65 @@ import { appendTranscriptSegments, clearContext, setTranscriptError, setTranscri
 import { createVideoSessionId, getDurationRejection, getFileExtension, getFileSizeRejection, getFileSizeRejectionForBytes, getVideoBudgetWarnings, getVideoWarnings, isSupportedAudio, isSupportedVideo, readAudioDuration, readVideoDuration } from '../lib/video'
 import { clearAudioData, getAudioData, registerAudioData } from '../lib/audioDataRegistry'
 import { clearVideoFiles, getVideoFile, registerVideoFile } from '../lib/videoFileRegistry'
+import { getMediaNextAction } from '../lib/workflowUi'
 import type { GenerationSettings } from '../types/generation'
 import { workerClient } from '../services/workerClient'
 import type { ExtractAudioResult, TranscribePartialResult, TranscribeResult } from '../workers/types'
-import { AudioSection, HiddenMediaInput, LoadingMetadataNotice, MediaDropZone, MediaErrorNotice, MediaMetadataGrid, MediaPanelHeader, MediaPreview, PanelActions, TranscriptSection, VideoWarnings } from './VideoUploadPanelSections'
-import { FrameSamplingSection } from './FrameSamplingSection'
+import { HiddenMediaInput, LoadingMetadataNotice, MediaDropZone, MediaErrorNotice, MediaPanelHeader, NextActionPanel, PanelActions } from './VideoUploadPanelSections'
+import { MediaReadySections } from './MediaReadySections'
+import { NormalIngestPanel } from './NormalIngestPanel'
+import { NormalMediaSummary } from './NormalMediaSummary'
 import { useFrameSampling } from '../store/hooks/useFrameSampling'
 import { useFrameSummaries } from '../store/hooks/useFrameSummaries'
-
+import { useNormalIngest } from '../store/hooks/useNormalIngest'
+import { useWorker } from '../store/hooks/useWorker'
 export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings }) => {
   const dispatch = useAppDispatch()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const objectUrlRef = useRef<string | null>(null)
   const audioObjectUrlRef = useRef<string | null>(null)
   const activeSessionRef = useRef<string | null>(null)
+  const [audioOnlyIndex, setAudioOnlyIndex] = useState(false)
   const video = useAppSelector((state) => state.video)
   const audio = useAppSelector((state) => state.audio)
   const transcript = useAppSelector((state) => state.context)
-  const modelStatus = useAppSelector((state) => state.model.status)
+  const model = useAppSelector((state) => state.model)
+  const ragReady = useAppSelector((state) => state.rag.status === 'ready')
+  const modelStatus = model.status
   const isReady = video.status === 'ready' && video.fileUrl
   const isAudioInput = video.mediaKind === 'audio'; const isVideoInput = video.mediaKind === 'video'
   const isLoading = video.status === 'loading-metadata'
   const isExtractingAudio = audio.status === 'extracting'
   const isTranscribing = transcript.transcriptStatus === 'transcribing'
   const modelReady = modelStatus === 'ready'
-  const { frames, isSamplingFrames, sampleFrames, clearFrameArtifacts } = useFrameSampling(settings, activeSessionRef)
+  const isPowerMode = settings.experienceMode === 'power'
+  const { loadModel } = useWorker()
+  const { frames, isSamplingFrames, sampleFrames, clearFrameArtifacts, registerSampledFrames } = useFrameSampling(settings, activeSessionRef)
   const { isSummarizingFrames, summarizeFrames } = useFrameSummaries(activeSessionRef, settings)
-
+  const normalIngest = useNormalIngest(settings, activeSessionRef, (objectUrl) => {
+    audioObjectUrlRef.current = objectUrl
+  }, clearFrameArtifacts, registerSampledFrames, audioOnlyIndex || isAudioInput)
+  const nextAction = getMediaNextAction({
+    mediaReady: Boolean(isReady),
+    isLoading,
+    isVideoInput,
+    videoStatus: video.status,
+    audioStatus: audio.status,
+    transcriptCount: transcript.transcriptSegments.length,
+    frameSampleCount: frames.samples.length,
+    frameSummaryCount: frames.summaries.length,
+    frameStatus: frames.status,
+    modelReady,
+    isExtractingAudio,
+    isTranscribing,
+    isSamplingFrames,
+    isSummarizingFrames,
+    chooseFile: () => inputRef.current?.click(),
+    extractAudio: () => void handleExtractAudio(),
+    sampleFrames: () => void sampleFrames(),
+    summarizeFrames: () => void summarizeFrames(),
+    transcribe: () => void handleTranscribe(),
+  })
   useEffect(() => {
     objectUrlRef.current = video.fileUrl
   }, [video.fileUrl])
@@ -51,13 +83,10 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       clearFrameArtifacts()
     }
   }, [clearFrameArtifacts])
-
   useEffect(() => {
     if (video.status !== 'ready') return
-
     const sizeRejection = getFileSizeRejectionForBytes(video.size, settings)
     const durationRejection = getDurationRejection(video.duration, settings)
-
     if (sizeRejection || durationRejection) {
       revokeActiveObjectUrl()
       revokeAudioObjectUrl()
@@ -77,7 +106,6 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       }))
       return
     }
-
     const warnings = getVideoBudgetWarnings(video.size, video.duration, settings)
     if (warnings.join('|') !== video.warnings.join('|') && video.sessionId) {
       dispatch(setVideoReady({
@@ -87,7 +115,6 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       }))
     }
   }, [clearFrameArtifacts, dispatch, settings, video.duration, video.lastModified, video.mediaKind, video.name, video.sessionId, video.size, video.status, video.type, video.warnings])
-
   const revokeActiveObjectUrl = () => {
     const activeUrl = objectUrlRef.current
     if (activeUrl) {
@@ -102,7 +129,6 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       audioObjectUrlRef.current = null
     }
   }
-
   const resetInput = () => {
     if (inputRef.current) {
       inputRef.current.value = ''
@@ -115,13 +141,12 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
     clearVideoFiles()
     clearAudioData()
     clearFrameArtifacts()
+    setAudioOnlyIndex(false)
     resetInput()
     dispatch({ type: RESET_APP_STATE })
   }
-
   const handleExtractAudio = async () => {
     if (!video.sessionId || video.status !== 'ready' || isExtractingAudio) return
-
     const file = getVideoFile(video.sessionId)
     if (!file) {
       dispatch(setAudioError({
@@ -130,7 +155,6 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       }))
       return
     }
-
     revokeAudioObjectUrl()
     if (video.sessionId) {
       clearAudioData()
@@ -146,7 +170,6 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
     dispatch(setProcessingStatus('extracting-audio'))
     dispatch(setProcessingProgress(0))
     dispatch(setProcessingError(''))
-
     try {
       const result = await workerClient.runTask<ExtractAudioResult>('EXTRACT_AUDIO', {
         sessionId: video.sessionId,
@@ -168,9 +191,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
           }))
         }
       })
-
       if (activeSessionRef.current !== result.sessionId) return
-
       const audioBytes: Uint8Array<ArrayBuffer> = new Uint8Array(result.bytes.byteLength)
       audioBytes.set(result.bytes)
       const blob = new Blob([audioBytes.buffer], { type: result.mimeType })
@@ -182,7 +203,6 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
         sampleRate: result.sampleRate,
         duration: video.duration,
       })
-
       dispatch(setAudioReady({
         sessionId: result.sessionId,
         objectUrl,
@@ -207,21 +227,17 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       dispatch(setProcessingStatus('idle'))
     }
   }
-
   const handleTranscribe = async () => {
     if (!video.sessionId || audio.status !== 'ready' || isTranscribing || !modelReady) return
-
     const audioData = getAudioData(video.sessionId)
     if (!audioData) {
       dispatch(setTranscriptError('The extracted audio is no longer available in browser memory. Extract audio again and retry transcription.'))
       return
     }
-
     dispatch(setTranscriptTranscribing())
     dispatch(setProcessingStatus('transcribing'))
     dispatch(setProcessingProgress(0))
     dispatch(setProcessingError(''))
-
     try {
       const result = await workerClient.runTask<TranscribeResult>('TRANSCRIBE', {
         sessionId: video.sessionId,
@@ -248,9 +264,7 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
           }))
         }
       })
-
       if (activeSessionRef.current !== result.sessionId) return
-
       dispatch(setTranscriptResult({
         segments: result.segments,
         rawText: result.rawText,
@@ -267,20 +281,18 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       dispatch(setProcessingStatus('idle'))
     }
   }
-
   const handleFiles = async (files: FileList | File[]) => {
     const file = Array.from(files)[0]
     if (!file) return
     const mediaKind: MediaKind | null = isSupportedVideo(file) ? 'video' : isSupportedAudio(file) ? 'audio' : null
-
     revokeActiveObjectUrl()
     revokeAudioObjectUrl()
     clearVideoFiles()
     clearAudioData()
     clearFrameArtifacts()
+    setAudioOnlyIndex(mediaKind === 'audio')
     activeSessionRef.current = null
     dispatch({ type: RESET_APP_STATE })
-
     if (!mediaKind) {
       dispatch(setVideoError({
         message: 'Unsupported file format. Use video files like MP4/WebM/MOV or audio files like MP3/WAV/M4A/FLAC/Ogg.',
@@ -293,7 +305,6 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       resetInput()
       return
     }
-
     const sizeRejection = getFileSizeRejection(file, settings)
     if (sizeRejection) {
       dispatch(setVideoError({
@@ -307,12 +318,10 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       resetInput()
       return
     }
-
     const sessionId = createVideoSessionId(file)
     const fileUrl = URL.createObjectURL(file)
     activeSessionRef.current = sessionId
     objectUrlRef.current = fileUrl
-
     dispatch(setVideoLoading({
       mediaKind,
       sessionId,
@@ -322,7 +331,6 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       type: file.type || getFileExtension(file.name).toUpperCase().replace('.', ''),
       lastModified: file.lastModified,
     }))
-
     try {
       const duration = mediaKind === 'video' ? await readVideoDuration(fileUrl) : await readAudioDuration(fileUrl)
       if (activeSessionRef.current !== sessionId) return
@@ -344,7 +352,6 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
         }))
         return
       }
-
       if (mediaKind === 'video') {
         registerVideoFile(sessionId, file)
       } else {
@@ -395,13 +402,12 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
       resetInput()
     }
   }
-
   return (
-    <div className="flex min-h-[560px] w-full flex-col overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 shadow-2xl">
+    <div className="flex min-h-[560px] w-full flex-col overflow-hidden rounded-lg border border-gray-800 bg-gray-900 shadow-2xl lg:h-full lg:min-h-0">
       <HiddenMediaInput inputRef={inputRef} onFiles={(files) => void handleFiles(files)} />
       <MediaPanelHeader isReady={Boolean(isReady)} isLoading={isLoading} status={video.status} />
-
-      <div className="flex flex-1 flex-col gap-4 p-5">
+      <div className="flex flex-1 flex-col gap-4 p-5 lg:min-h-0 lg:overflow-y-auto">
+        {isPowerMode && isReady && <NextActionPanel {...nextAction} />}
         {!isReady && (
           <MediaDropZone
             settings={settings}
@@ -409,85 +415,74 @@ export const VideoUploadPanel = ({ settings }: { settings: GenerationSettings })
             onFiles={(files) => void handleFiles(files)}
           />
         )}
-
         {isLoading && <LoadingMetadataNotice />}
-
         {video.status === 'error' && (
           <MediaErrorNotice error={video.error} name={video.name} size={video.size} />
         )}
-
-        {isReady && (
+        {isReady && !isPowerMode && (
           <>
-            <MediaPreview mediaKind={video.mediaKind} fileUrl={video.fileUrl} />
-            <MediaMetadataGrid
+            <NormalIngestPanel
+              modelStatus={model.status}
+              modelProgress={model.progress}
+              modelError={model.error}
+              buildRunning={normalIngest.running}
+              buildPhase={normalIngest.phase}
+              buildProgress={normalIngest.progress}
+              buildError={normalIngest.error}
+              ragReady={ragReady}
+              audioOnlyIndex={audioOnlyIndex || isAudioInput}
+              audioOnlyLocked={isAudioInput}
+              onAudioOnlyIndexChange={setAudioOnlyIndex}
+              onLoadModel={() => void loadModel().catch(() => undefined)}
+              onBuildIndex={() => void normalIngest.buildIndex()}
+            />
+            <NormalMediaSummary
               mediaKind={video.mediaKind}
+              fileUrl={video.fileUrl}
               name={video.name}
               size={video.size}
               duration={video.duration}
               type={video.type}
               sessionId={video.sessionId}
+              warnings={video.warnings}
             />
-
-            {video.warnings.length > 0 && (
-              <VideoWarnings warnings={video.warnings} />
-            )}
-
-            {isVideoInput && (
-              <FrameSamplingSection
-                status={frames.status}
-                progress={frames.progress}
-                phase={frames.phase}
-                error={frames.error}
-                samples={frames.samples}
-                summaries={frames.summaries}
-                summaryStatus={frames.summaryStatus}
-                summaryProgress={frames.summaryProgress}
-                summaryPhase={frames.summaryPhase}
-                summaryError={frames.summaryError}
-                summaryWarnings={frames.summaryWarnings}
-                settings={settings}
-                isSampling={isSamplingFrames}
-                isSummarizing={isSummarizingFrames}
-                modelReady={modelReady}
-                onSampleFrames={() => void sampleFrames()}
-                onSummarizeFrames={() => void summarizeFrames()}
-              />
-            )}
-
-            <AudioSection
-              isAudioInput={isAudioInput}
-              isVideoInput={isVideoInput}
-              status={audio.status}
-              progress={audio.progress}
-              phase={audio.phase}
-              error={audio.error}
-              objectUrl={audio.objectUrl}
-              fileName={audio.fileName}
-              size={audio.size}
-              format={audio.format}
-              sampleRate={audio.sampleRate}
-              mimeType={audio.mimeType}
-              settings={settings}
-              onExtractAudio={() => void handleExtractAudio()}
-            />
-
-            {audio.status === 'ready' && (
-              <TranscriptSection
-                status={transcript.transcriptStatus}
-                progress={transcript.transcriptProgress}
-                phase={transcript.transcriptPhase}
-                error={transcript.transcriptError}
-                warnings={transcript.transcriptWarnings}
-                segments={transcript.transcriptSegments}
-                settings={settings}
-                modelReady={modelReady}
-                isTranscribing={isTranscribing}
-                onTranscribe={() => void handleTranscribe()}
-              />
-            )}
           </>
         )}
-
+        {isReady && isPowerMode && (
+          <MediaReadySections
+            mediaKind={video.mediaKind}
+            fileUrl={video.fileUrl}
+            name={video.name}
+            size={video.size}
+            duration={video.duration}
+            type={video.type}
+            sessionId={video.sessionId}
+            warnings={video.warnings}
+            isAudioInput={isAudioInput}
+            isVideoInput={isVideoInput}
+            settings={settings}
+            modelReady={modelReady}
+            audio={audio}
+            transcript={{
+              status: transcript.transcriptStatus,
+              progress: transcript.transcriptProgress,
+              phase: transcript.transcriptPhase,
+              error: transcript.transcriptError,
+              warnings: transcript.transcriptWarnings,
+              segments: transcript.transcriptSegments,
+              isTranscribing,
+            }}
+            frames={{
+              ...frames,
+              isSampling: isSamplingFrames,
+              isSummarizing: isSummarizingFrames,
+            }}
+            onExtractAudio={() => void handleExtractAudio()}
+            onSampleFrames={() => void sampleFrames()}
+            onSummarizeFrames={() => void summarizeFrames()}
+            onTranscribe={() => void handleTranscribe()}
+          />
+        )}
         {(isReady || isLoading || video.status === 'error') && (
           <PanelActions onReplace={() => inputRef.current?.click()} onReset={resetVideoSession} />
         )}

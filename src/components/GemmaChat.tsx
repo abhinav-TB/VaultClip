@@ -3,10 +3,13 @@ import { useAppSelector } from '../store/hooks'
 import { useRagIndex } from '../store/hooks/useRagIndex'
 import { useWorker } from '../store/hooks/useWorker'
 import type { GenerationSettings } from '../types/generation'
+import { getChatBlockedMessage, getChatInputPlaceholder } from '../lib/chatReadiness'
 import { formatRagContext, formatTime } from '../lib/rag'
 import { getLoadingMessage, getPhaseProgressLabel, getSourceLabel, getStageLabel } from '../lib/modelRuntime'
+import { ContextPrepPanel } from './ContextPrepPanel'
 import { RuntimeDetail } from './RuntimeDetail'
 import type { RagRetrievedChunk } from '../store/slices/ragSlice'
+import type { MediaKind } from '../store/slices/videoSlice'
 
 interface PreviewAttachment {
   file: File
@@ -40,7 +43,10 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
   const transcriptStatus = useAppSelector((state) => state.context.transcriptStatus)
   const transcriptCount = useAppSelector((state) => state.context.transcriptSegments.length)
   const frameSummaryStatus = useAppSelector((state) => state.frames.summaryStatus)
+  const frameSummaryError = useAppSelector((state) => state.frames.summaryError)
   const frameSummaryCount = useAppSelector((state) => state.frames.summaries.length)
+  const mediaKind = useAppSelector((state) => state.video.mediaKind)
+  const mediaName = useAppSelector((state) => state.video.name)
   const canBuildIndex = transcriptCount > 0 || frameSummaryCount > 0
   const {
     status: modelStatus,
@@ -54,10 +60,12 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
   const [attachments, setAttachments] = useState<PreviewAttachment[]>([])
   const modelReady = modelStatus === 'ready'
   const modelLoading = modelStatus === 'loading'
+  const contextReady = rag.status === 'ready'
+  const chatReady = modelReady && contextReady
   const busy = processingStatus !== 'idle' && processingStatus !== 'complete'
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!modelReady || !e.target.files) return
+    if (!chatReady || !e.target.files) return
     const files = Array.from(e.target.files)
 
     for (const file of files) {
@@ -91,12 +99,12 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
   }
 
   const handleSend = async () => {
-    if ((!input.trim() && attachments.length === 0) || busy || !modelReady) return
+    if ((!input.trim() && attachments.length === 0) || busy || !chatReady) return
 
     const userMsg = input
     const payloadAttachments = attachments.map(a => ({ type: a.type, data: a.content, name: a.file.name }))
     const retrievedChunks = userMsg.trim() ? await retrieveContext(userMsg) : []
-    const groundedPrompt = buildGroundedPrompt(userMsg || 'Please analyze the attached files.', retrievedChunks)
+    const groundedPrompt = buildGroundedPrompt(userMsg || 'Please analyze the attached files.', retrievedChunks, mediaKind, mediaName)
 
     setInput('')
     setAttachments([])
@@ -146,7 +154,7 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
   }
 
   return (
-    <div className="flex h-[560px] w-full flex-col overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 shadow-2xl">
+    <div className="flex min-h-[760px] w-full flex-col overflow-hidden rounded-lg border border-gray-800 bg-gray-900 shadow-2xl lg:h-full lg:min-h-0">
       <div className="bg-gray-800/50 p-4 border-b border-gray-800 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${
@@ -204,39 +212,47 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        <ContextIndexStatus
-          status={rag.status}
-          embeddingStatus={rag.embeddingStatus}
-          retrievalMode={rag.retrievalMode}
-          chunkCount={rag.chunks.length}
-          warning={rag.warning}
-          error={rag.error}
-          phase={rag.phase}
-          progress={rag.progress}
-          transcriptStatus={transcriptStatus}
-          transcriptCount={transcriptCount}
-          frameSummaryStatus={frameSummaryStatus}
-          frameSummaryCount={frameSummaryCount}
-          canBuildIndex={canBuildIndex}
-          onBuildIndex={() => void buildIndex()}
-        />
+      <ContextPrepPanel
+        status={rag.status}
+        embeddingStatus={rag.embeddingStatus}
+        retrievalMode={rag.retrievalMode}
+        chunkCount={rag.chunks.length}
+        warning={rag.warning}
+        error={rag.error}
+        startedAtMs={rag.startedAtMs}
+        completedAtMs={rag.completedAtMs}
+        phase={rag.phase}
+        progress={rag.progress}
+        transcriptStatus={transcriptStatus}
+        transcriptCount={transcriptCount}
+        frameSummaryStatus={frameSummaryStatus}
+        frameSummaryError={frameSummaryError}
+        frameSummaryCount={frameSummaryCount}
+        canBuildIndex={canBuildIndex}
+        modelReady={modelReady}
+        contextReady={contextReady}
+        experienceMode={settings.experienceMode}
+        onBuildIndex={() => void buildIndex()}
+      />
 
+      <div className="flex-1 overflow-y-auto p-5 space-y-4 lg:min-h-0 lg:p-6">
         {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-2">
+          <div className="flex min-h-full flex-col items-center justify-center gap-2 text-center text-gray-500">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-2 opacity-50"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-            <p>Private Multimodal Chat</p>
-            <p className="text-xs text-gray-600">
-              {modelReady ? 'Drag files or text into the machine directly.' : 'Load Gemma before sending prompts or attachments.'}
+            <p className="font-semibold text-gray-300">Private media Q&A</p>
+            <p className="max-w-sm text-xs leading-5 text-gray-600">
+              {chatReady
+                ? 'Ask a question grounded in the indexed media context. Citations jump back to the preview.'
+                : getChatBlockedMessage(modelReady, contextReady, canBuildIndex)}
             </p>
           </div>
         )}
         {messages.map((m, i) => (
           <div key={i} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
-            <div className={`max-w-[80%] p-3 rounded-2xl text-sm break-words whitespace-pre-wrap shadow-sm ${
+            <div className={`max-w-[88%] rounded-lg p-4 text-sm break-words whitespace-pre-wrap shadow-sm lg:text-[15px] ${
               m.role === 'user'
-                ? 'bg-blue-600 text-white rounded-tr-none'
-                : 'bg-gray-800 text-gray-200 rounded-tl-none border border-gray-700'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-800 text-gray-200 border border-gray-700'
             }`}>
               {m.content || (m.role === 'ai' && <span className="animate-pulse text-gray-500 font-bold tracking-widest">. . .</span>)}
             </div>
@@ -256,7 +272,7 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
             )}
 
             {m.citations && m.citations.length > 0 && (
-              <div className="mt-2 flex max-w-[80%] flex-wrap gap-2">
+              <div className="mt-2 flex max-w-[88%] flex-wrap gap-2">
                 {m.citations.map((citation, index) => (
                   <button
                     key={citation.id}
@@ -302,11 +318,11 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
       <div className="p-4 bg-gray-800/30 border-t border-gray-800 shrink-0">
         <div className="flex gap-2">
           <label className={`p-3 border border-gray-700 rounded-xl transition-all flex items-center justify-center group shrink-0 shadow-sm ${
-            modelReady
+            chatReady
               ? 'cursor-pointer bg-gray-800 text-gray-400 hover:bg-gray-700 hover:border-gray-600 hover:text-white'
               : 'cursor-not-allowed bg-gray-900 text-gray-700'
           }`}>
-            <input type="file" multiple className="hidden" onChange={handleFileSelect} accept="image/*,.txt,.md,.csv,.json,.rtf" disabled={!modelReady} />
+            <input type="file" multiple className="hidden" onChange={handleFileSelect} accept="image/*,.txt,.md,.csv,.json,.rtf" disabled={!chatReady} />
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
           </label>
           <input
@@ -314,13 +330,13 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            disabled={!modelReady}
-            placeholder={modelReady ? 'Ask Gemma something or attach files...' : 'Load Gemma to start chatting'}
+            disabled={!chatReady}
+            placeholder={chatReady ? 'Ask about the indexed media...' : getChatInputPlaceholder(modelReady, contextReady, canBuildIndex)}
             className="flex-1 bg-gray-950 border border-gray-700 rounded-xl px-4 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:text-gray-600 transition-colors shadow-inner"
           />
           <button
             onClick={handleSend}
-            disabled={busy || !modelReady}
+            disabled={busy || !chatReady}
             className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-colors shadow-md shrink-0"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
@@ -331,17 +347,34 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
   )
 }
 
-function buildGroundedPrompt(userPrompt: string, retrievedChunks: RagRetrievedChunk[]) {
-  if (!retrievedChunks.length) return userPrompt
+function buildGroundedPrompt(userPrompt: string, retrievedChunks: RagRetrievedChunk[], mediaKind: MediaKind | null, mediaName: string | null) {
+  const mediaLabel = mediaKind === 'audio' ? 'audio recording' : mediaKind === 'video' ? 'video recording' : 'media file'
+  const mediaDescriptor = mediaName ? `${mediaLabel}: ${mediaName}` : mediaLabel
+  if (!retrievedChunks.length) {
+    return [
+      `The selected source is a ${mediaDescriptor}.`,
+      mediaKind === 'audio'
+        ? 'Treat it as an audio source. Do not infer visual details unless the user attached visual files or provided them explicitly.'
+        : mediaKind === 'video'
+          ? 'Treat it as a video source.'
+          : 'Treat it as a local media source.',
+      '',
+      `Question: ${userPrompt}`,
+    ].join('\n')
+  }
 
   return [
+    `The indexed source is a ${mediaDescriptor}.`,
+    mediaKind === 'audio'
+      ? 'The context comes from audio transcription. Do not describe visual details unless they are present in attached files or explicit user-provided context.'
+      : 'The context may include both transcript and visual frame summaries from the video.',
     'Answer the user question using the retrieved local media context below.',
     'Synthesize the context into a single, cohesive response. Do not explicitly say "one segment mentions" or "another segment shows". Write a natural response based on the entire context combined.',
     'Use the provided citation numbers and timestamp ranges when evidence supports the answer.',
     'If the retrieved context is insufficient, say what is missing instead of guessing.',
     '',
     'Retrieved context:',
-    formatRagContext(retrievedChunks),
+    formatRagContext(retrievedChunks, mediaKind),
     '',
     `Question: ${userPrompt}`,
   ].join('\n')
@@ -349,120 +382,4 @@ function buildGroundedPrompt(userPrompt: string, retrievedChunks: RagRetrievedCh
 
 function seekMedia(time: number) {
   window.dispatchEvent(new CustomEvent('clipmind:seek-media', { detail: { time } }))
-}
-
-const ContextIndexStatus = ({
-  status,
-  embeddingStatus,
-  retrievalMode,
-  chunkCount,
-  warning,
-  error,
-  phase,
-  progress,
-  transcriptStatus,
-  transcriptCount,
-  frameSummaryStatus,
-  frameSummaryCount,
-  canBuildIndex,
-  onBuildIndex,
-}: {
-  status: string
-  embeddingStatus: string
-  retrievalMode: string
-  chunkCount: number
-  warning: string | null
-  error: string | null
-  phase: string | null
-  progress: number
-  transcriptStatus: string
-  transcriptCount: number
-  frameSummaryStatus: string
-  frameSummaryCount: number
-  canBuildIndex: boolean
-  onBuildIndex: () => void
-}) => {
-  const waiting = status === 'idle'
-  const ready = status === 'ready'
-  const indexing = status === 'indexing'
-  const hasTranscript = transcriptCount > 0
-  const hasFrameSummaries = frameSummaryCount > 0
-  const canStartIndex = canBuildIndex || hasTranscript || hasFrameSummaries
-  const title = waiting
-    ? 'Context index: waiting for transcript or frame summaries'
-    : ready
-      ? `Context index: ${chunkCount} chunks ready`
-      : `Context index: ${phase ?? status}`
-  const detail = waiting
-    ? getWaitingContextMessage(transcriptStatus, hasTranscript, frameSummaryStatus, hasFrameSummaries)
-    : ready
-      ? `${transcriptCount} transcript segments and ${frameSummaryCount} frame summaries are available for timestamped retrieval.`
-      : phase ?? 'Preparing timestamped retrieval context.'
-  const dotClass = status === 'error'
-    ? 'bg-red-500'
-    : ready
-      ? 'bg-green-500'
-      : indexing
-        ? 'bg-cyan-400 animate-pulse'
-        : 'bg-gray-500'
-
-  return (
-    <div className="rounded-lg border border-gray-800 bg-gray-950/70 px-3 py-3 text-xs text-gray-500">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={`h-2 w-2 rounded-full ${dotClass}`} />
-            <span className="font-semibold text-gray-300">{title}</span>
-          </div>
-          <p className="mt-1 leading-5 text-gray-500">{detail}</p>
-        </div>
-        <span className="shrink-0 rounded-md border border-gray-800 bg-gray-900 px-2 py-1 font-bold uppercase tracking-wide text-gray-500">
-          {getRetrievalLabel(retrievalMode, embeddingStatus)}
-        </span>
-      </div>
-      {!indexing && canStartIndex && (
-        <button
-          type="button"
-          onClick={onBuildIndex}
-          className="mt-3 w-full rounded-lg border border-cyan-500/40 bg-cyan-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:bg-cyan-500 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800 disabled:text-gray-500"
-        >
-          {ready ? 'Rebuild Context Index' : 'Build Context Index'}
-        </button>
-      )}
-      {status === 'indexing' && (
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-800">
-          <div className="h-full bg-cyan-500 transition-all duration-500" style={{ width: `${progress}%` }} />
-        </div>
-      )}
-      {warning && <p className="mt-2 leading-5 text-yellow-200/80">{warning}</p>}
-      {error && <p className="mt-2 leading-5 text-red-200/80">{error}</p>}
-    </div>
-  )
-}
-
-function getRetrievalLabel(retrievalMode: string, embeddingStatus: string) {
-  if (retrievalMode === 'lexical') return 'lexical'
-  if (embeddingStatus === 'ready') return 'hybrid + embeddings'
-  if (embeddingStatus === 'loading') return 'hybrid loading'
-  if (embeddingStatus === 'error') return 'hybrid fallback'
-  return 'hybrid'
-}
-
-function getWaitingContextMessage(transcriptStatus: string, hasTranscript: boolean, frameSummaryStatus: string, hasFrameSummaries: boolean) {
-  if (hasTranscript || hasFrameSummaries) {
-    return 'Context artifacts are available. Build the index when you are ready to use them for timestamped Q&A.'
-  }
-
-  const transcriptText = transcriptStatus === 'transcribing'
-    ? 'Transcript is currently running.'
-    : transcriptStatus === 'ready'
-      ? 'Transcript is ready.'
-      : 'Run Transcribe to add spoken context.'
-  const frameText = frameSummaryStatus === 'summarizing'
-    ? 'Frame summaries are currently running.'
-    : frameSummaryStatus === 'ready'
-      ? 'Frame summaries are ready.'
-      : 'Sample and summarize frames to add visual context.'
-
-  return `${transcriptText} ${frameText}`
 }

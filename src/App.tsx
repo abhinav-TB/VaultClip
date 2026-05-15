@@ -5,11 +5,16 @@ import { ModelRuntimeStatus } from './components/ModelRuntimeStatus'
 import { SettingsModal } from './components/SettingsModal'
 import { VideoUploadPanel } from './components/VideoUploadPanel'
 import { WorkflowStep } from './components/WorkflowStep'
+import { getWorkflowState } from './lib/workflowUi'
+import { useAppSelector } from './store/hooks'
 import type { GenerationSettings } from './types/generation'
 
 function App() {
+  const workflow = useAppSelector(getWorkflowState)
+  const ragReady = useAppSelector((state) => state.rag.status === 'ready')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [generationSettings, setGenerationSettings] = useState<GenerationSettings>({
+    experienceMode: 'normal',
     maxNewTokens: 128,
     retrievalMode: 'hybrid',
     embeddingModelId: 'onnx-community/all-MiniLM-L6-v2-ONNX',
@@ -30,13 +35,13 @@ function App() {
   })
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-950 text-gray-100 font-sans selection:bg-blue-500/30">
-      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-md sticky top-0 z-10 p-4">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <h1 className="bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-2xl font-black text-transparent tracking-tighter">
+    <div className={`flex min-h-screen flex-col bg-gray-950 font-sans text-gray-100 selection:bg-blue-500/30 ${ragReady ? 'lg:h-screen lg:overflow-hidden' : ''}`}>
+      <header className="sticky top-0 z-10 border-b border-gray-800 bg-gray-950/90 p-4 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4">
+          <h1 className="text-2xl font-black tracking-normal text-gray-100">
             CLIP MIND
           </h1>
-          <div className="flex items-center gap-4 text-xs font-medium text-gray-500">
+          <div className="flex items-center gap-3 text-xs font-medium text-gray-500">
             <ModelRuntimeStatus />
             <button
               type="button"
@@ -62,37 +67,43 @@ function App() {
         />
       )}
 
-      <main className="flex flex-1 flex-col items-center px-6 py-8">
+      <main className={`flex flex-1 flex-col items-center px-4 py-6 sm:px-6 lg:py-8 ${ragReady ? 'lg:min-h-0 lg:overflow-hidden' : ''}`}>
         <Routes>
           <Route
             path="/"
             element={
-              <div className="flex w-full max-w-7xl flex-col gap-8">
-                <section className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div className={`flex w-full max-w-[1500px] flex-col gap-6 ${ragReady ? 'lg:min-h-0 lg:flex-1' : ''}`}>
+                <section className="grid gap-5 lg:grid-cols-[minmax(0,0.78fr)_minmax(620px,1.22fr)] lg:items-end">
                   <div className="max-w-2xl">
-                    <p className="text-xs font-bold uppercase tracking-[0.25em] text-blue-400">Sprint 1 workflow</p>
-                    <h2 className="mt-3 text-4xl font-black tracking-tight text-gray-100">Upload a video, then work with it locally.</h2>
+                    <p className="text-xs font-bold uppercase tracking-wide text-blue-400">Private media workspace</p>
+                    <h2 className="mt-3 text-3xl font-black tracking-normal text-gray-100 sm:text-4xl">Analyze recordings with a clear, local workflow.</h2>
                     <p className="mt-3 text-base leading-7 text-gray-500">
-                      Select one active video session, verify the preview and metadata, then use Gemma for follow-up analysis.
+                      {workflow.summary}
                     </p>
                   </div>
-                  <div className="grid gap-2 text-xs sm:grid-cols-3 lg:w-[520px]">
-                    <WorkflowStep active label="1. Select" detail="Choose one file" />
-                    <WorkflowStep label="2. Preview" detail="Confirm metadata" />
-                    <WorkflowStep label="3. Analyze" detail="Use local AI" />
+                  <div className="grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                    {workflow.steps.map((step) => (
+                      <WorkflowStep key={step.label} state={step.state} label={step.label} detail={step.detail} />
+                    ))}
                   </div>
                 </section>
-                <section className="grid w-full gap-6 lg:grid-cols-[minmax(0,1.12fr)_minmax(380px,0.88fr)] lg:items-start">
-                  <VideoUploadPanel settings={generationSettings} />
-                  <GemmaChat settings={generationSettings} />
-                </section>
+                {generationSettings.experienceMode === 'normal' && !ragReady ? (
+                  <section className="mx-auto w-full max-w-5xl">
+                    <VideoUploadPanel settings={generationSettings} />
+                  </section>
+                ) : (
+                  <section className="grid w-full gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1.28fr)_minmax(480px,0.92fr)] lg:items-start lg:overflow-hidden">
+                    <VideoUploadPanel settings={generationSettings} />
+                    <GemmaChat settings={generationSettings} />
+                  </section>
+                )}
               </div>
             }
           />
         </Routes>
       </main>
 
-      <footer className="p-8 text-center border-t border-gray-900 text-gray-600 text-xs tracking-widest uppercase font-bold">
+      <footer className="border-t border-gray-900 p-6 text-center text-xs font-bold uppercase tracking-wide text-gray-600">
         Built with Gemma
       </footer>
     </div>

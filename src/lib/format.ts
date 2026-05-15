@@ -28,6 +28,14 @@ export function formatDuration(duration: number | null) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
+/** Formats elapsed seconds for process timing labels. */
+export function formatElapsedTime(seconds: number | null) {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return 'Unknown'
+  if (seconds < 10) return `${seconds.toFixed(1)}s`
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  return formatDuration(seconds)
+}
+
 /** Clamps chat output tokens to the supported UI/runtime range. */
 export function clampTokenLimit(value: number) {
   if (!Number.isFinite(value)) return 128

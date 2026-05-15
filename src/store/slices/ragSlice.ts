@@ -38,6 +38,8 @@ interface RagState {
   phase: string | null
   error: string | null
   warning: string | null
+  startedAtMs: number | null
+  completedAtMs: number | null
   sessionId: string | null
   chunks: RagChunk[]
   settingsSnapshot: RagSettingsSnapshot | null
@@ -62,6 +64,8 @@ const initialState: RagState = {
   phase: null,
   error: null,
   warning: null,
+  startedAtMs: null,
+  completedAtMs: null,
   sessionId: null,
   chunks: [],
   settingsSnapshot: null,
@@ -72,7 +76,7 @@ export const ragSlice = createSlice({
   name: 'rag',
   initialState,
   reducers: {
-    setRagIndexingStarted: (state, action: PayloadAction<{ sessionId: string; retrievalMode: RetrievalMode; embeddingModelId: string }>) => {
+    setRagIndexingStarted: (state, action: PayloadAction<{ sessionId: string; retrievalMode: RetrievalMode; embeddingModelId: string; startedAtMs: number }>) => {
       state.status = 'indexing'
       state.retrievalMode = action.payload.retrievalMode
       state.embeddingModelId = action.payload.embeddingModelId
@@ -81,6 +85,8 @@ export const ragSlice = createSlice({
       state.phase = 'Preparing context chunks'
       state.error = null
       state.warning = null
+      state.startedAtMs = action.payload.startedAtMs
+      state.completedAtMs = null
       state.sessionId = action.payload.sessionId
       state.chunks = []
       state.settingsSnapshot = action.payload
@@ -97,6 +103,7 @@ export const ragSlice = createSlice({
         chunks: RagChunk[]
         embeddingStatus: EmbeddingStatus
         warning?: string | null
+        completedAtMs: number
       }>,
     ) => {
       if (state.sessionId && state.sessionId !== action.payload.sessionId) return
@@ -106,14 +113,16 @@ export const ragSlice = createSlice({
       state.error = null
       state.warning = action.payload.warning ?? null
       state.embeddingStatus = action.payload.embeddingStatus
+      state.completedAtMs = action.payload.completedAtMs
       state.chunks = action.payload.chunks
     },
-    setRagIndexError: (state, action: PayloadAction<{ sessionId?: string | null; message: string }>) => {
+    setRagIndexError: (state, action: PayloadAction<{ sessionId?: string | null; message: string; completedAtMs?: number | null }>) => {
       state.status = 'error'
       state.progress = 0
       state.phase = null
       state.error = action.payload.message
       state.embeddingStatus = 'error'
+      state.completedAtMs = action.payload.completedAtMs ?? null
       state.sessionId = action.payload.sessionId ?? state.sessionId
       state.chunks = []
     },

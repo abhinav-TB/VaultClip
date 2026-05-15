@@ -34,12 +34,12 @@ export const MediaPanelHeader = ({ isReady, isLoading, status }: MediaPanelHeade
     <div>
       <div className="flex items-center gap-2">
         <span className={`h-2 w-2 rounded-full ${isReady ? 'bg-green-500' : isLoading ? 'bg-yellow-400 animate-pulse' : status === 'error' ? 'bg-red-500' : 'bg-gray-500'}`} />
-        <span className="text-sm font-semibold text-gray-200">Video</span>
+        <span className="text-sm font-semibold text-gray-200">Source Media</span>
       </div>
-      <p className="mt-1 text-xs text-gray-500">One active local video or audio file for transcript processing.</p>
+      <p className="mt-1 text-xs text-gray-500">One local video or audio file is active for analysis in this workspace.</p>
     </div>
     <span className="shrink-0 rounded-md border border-gray-700 bg-gray-950 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-      {isReady ? 'Ready to process' : isLoading ? 'Reading metadata' : status === 'error' ? 'Needs attention' : 'No media'}
+      {isReady ? 'Ready' : isLoading ? 'Checking file' : status === 'error' ? 'Needs review' : 'No file'}
     </span>
   </div>
 )
@@ -67,27 +67,89 @@ export const MediaDropZone = ({ settings, onChoose, onFiles }: MediaDropZoneProp
       event.preventDefault()
       onFiles(event.dataTransfer.files)
     }}
-    className="flex flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-gray-700 bg-gray-950/60 p-8 text-center transition-colors hover:border-blue-500/70 hover:bg-blue-500/5 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+    className="flex flex-1 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-gray-700 bg-gray-950/60 p-8 text-center transition-colors hover:border-blue-500/70 hover:bg-blue-500/5 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
   >
-    <div className="mb-5 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4 text-blue-300">
+    <div className="mb-5 rounded-lg border border-blue-500/20 bg-blue-500/10 p-4 text-blue-300">
       <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="m22 8-6 4 6 4V8Z" />
         <rect width="14" height="12" x="2" y="6" rx="2" ry="2" />
       </svg>
     </div>
-    <p className="text-xl font-bold tracking-tight text-gray-100">Select media to begin</p>
+    <p className="text-xl font-bold tracking-tight text-gray-100">Add a recording to begin</p>
     <p className="mt-3 max-w-sm text-sm leading-6 text-gray-500">
-      Drop a video or audio recording here, or browse from your computer. Metadata loads before any processing starts.
+      Drop in a video or audio file, or browse from your computer. Clip Mind checks the file before preparing context.
     </p>
-    <div className="mt-6 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-950/30 transition-colors hover:bg-blue-500">
+    <div className="mt-6 rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-950/30 transition-colors hover:bg-blue-500">
       Choose File
     </div>
     <div className="mt-4 rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-500">
       MP4, WebM, MOV, MP3, WAV, M4A, FLAC, Ogg
     </div>
     <p className="mt-3 text-xs text-gray-600">
-      Current budget: {settings.maxVideoSizeMb} MB / {settings.maxVideoDurationMinutes} min
+      Limits: {settings.maxVideoSizeMb} MB and {settings.maxVideoDurationMinutes} minutes
     </p>
+  </div>
+)
+
+export interface NextActionPanelConfig {
+  title: string
+  detail: string
+  statusLabel: string
+  primaryAction?: {
+    label: string
+    onClick: () => void
+    disabled?: boolean
+    title?: string
+  }
+  secondaryAction?: {
+    label: string
+    onClick: () => void
+    disabled?: boolean
+    title?: string
+  }
+}
+
+export const NextActionPanel = ({
+  title,
+  detail,
+  statusLabel,
+  primaryAction,
+  secondaryAction,
+}: NextActionPanelConfig) => (
+  <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <div className="text-[10px] font-bold uppercase tracking-wide text-blue-300">{statusLabel}</div>
+        <p className="mt-1 text-base font-semibold text-gray-100">{title}</p>
+        <p className="mt-1 text-sm leading-6 text-blue-100/70">{detail}</p>
+      </div>
+      {(primaryAction || secondaryAction) && (
+        <div className="flex shrink-0 flex-col gap-2 sm:min-w-40">
+          {primaryAction && (
+            <button
+              type="button"
+              onClick={primaryAction.onClick}
+              disabled={primaryAction.disabled}
+              title={primaryAction.title}
+              className="rounded-lg border border-blue-500/50 bg-blue-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800 disabled:text-gray-500"
+            >
+              {primaryAction.label}
+            </button>
+          )}
+          {secondaryAction && (
+            <button
+              type="button"
+              onClick={secondaryAction.onClick}
+              disabled={secondaryAction.disabled}
+              title={secondaryAction.title}
+              className="rounded-lg border border-gray-700 px-4 py-2 text-xs font-bold uppercase tracking-wide text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 hover:text-white disabled:cursor-not-allowed disabled:border-gray-800 disabled:text-gray-600"
+            >
+              {secondaryAction.label}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   </div>
 )
 
@@ -115,7 +177,7 @@ export const MediaPreview = ({ mediaKind, fileUrl }: MediaPreviewProps) => {
   }, [])
 
   return mediaKind === 'audio' ? (
-    <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-5">
+    <div className="rounded-lg border border-gray-800 bg-gray-950/70 p-5">
       <p className="mb-3 text-sm font-semibold text-gray-100">Audio preview</p>
       <audio ref={audioRef} src={fileUrl ?? undefined} controls className="w-full" />
     </div>
@@ -124,7 +186,7 @@ export const MediaPreview = ({ mediaKind, fileUrl }: MediaPreviewProps) => {
       ref={videoRef}
       src={fileUrl ?? undefined}
       controls
-      className="aspect-video w-full rounded-xl border border-gray-800 bg-black object-contain"
+      className="aspect-video min-h-[360px] w-full rounded-lg border border-gray-800 bg-black object-contain lg:min-h-[460px]"
     />
   )
 }
@@ -140,7 +202,7 @@ interface MediaMetadataGridProps {
 
 /** Shows serializable metadata for the active media session. */
 export const MediaMetadataGrid = ({ mediaKind, name, size, duration, type, sessionId }: MediaMetadataGridProps) => (
-  <div className="grid gap-3 rounded-xl border border-gray-800 bg-gray-950/70 p-4 sm:grid-cols-2">
+  <div className="grid gap-4 rounded-lg border border-gray-800 bg-gray-950/70 p-5 sm:grid-cols-2 xl:grid-cols-3">
     <VideoMetadataItem label="File" value={name ?? 'Unknown'} wide />
     <VideoMetadataItem label="Size" value={formatFileSize(size)} />
     <VideoMetadataItem label="Duration" value={formatDuration(duration)} />
@@ -152,7 +214,7 @@ export const MediaMetadataGrid = ({ mediaKind, name, size, duration, type, sessi
 
 export const LoadingMetadataNotice = () => (
   <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-100">
-    Reading video metadata...
+    Reviewing file details...
   </div>
 )
 
@@ -164,7 +226,7 @@ interface MediaErrorNoticeProps {
 
 export const MediaErrorNotice = ({ error, name, size }: MediaErrorNoticeProps) => (
   <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
-    <p className="text-sm font-semibold text-red-100">Video was not accepted</p>
+    <p className="text-sm font-semibold text-red-100">This file could not be prepared</p>
     <p className="mt-1 text-sm leading-6 text-red-200/80">{error}</p>
     {name && (
       <p className="mt-2 text-xs text-red-200/60">
@@ -176,7 +238,7 @@ export const MediaErrorNotice = ({ error, name, size }: MediaErrorNoticeProps) =
 
 export const VideoWarnings = ({ warnings }: { warnings: string[] }) => (
   <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
-    <p className="text-sm font-semibold text-yellow-100">Near MVP processing limit</p>
+    <p className="text-sm font-semibold text-yellow-100">Close to the current processing limit</p>
     <ul className="mt-2 space-y-1 text-sm leading-6 text-yellow-100/80">
       {warnings.map((warning) => (
         <li key={warning}>{warning}</li>
@@ -222,7 +284,7 @@ export const AudioSection = ({
   const isExtractingAudio = status === 'extracting'
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-4">
+    <div className="rounded-lg border border-gray-800 bg-gray-950/70 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-gray-100">Transcription audio</p>
@@ -301,7 +363,7 @@ export const TranscriptSection = ({
   isTranscribing,
   onTranscribe,
 }: TranscriptSectionProps) => (
-  <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-4">
+    <div className="rounded-lg border border-gray-800 bg-gray-950/70 p-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <p className="text-sm font-semibold text-gray-100">Transcript</p>
@@ -367,14 +429,14 @@ export const PanelActions = ({ onReplace, onReset }: PanelActionsProps) => (
     <button
       type="button"
       onClick={onReplace}
-      className="flex-1 rounded-xl border border-blue-500/50 bg-blue-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-blue-500"
+      className="flex-1 rounded-lg border border-blue-500/50 bg-blue-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-blue-500"
     >
       Replace File
     </button>
     <button
       type="button"
       onClick={onReset}
-      className="rounded-xl border border-gray-700 px-4 py-3 text-sm font-bold text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 hover:text-white"
+      className="rounded-lg border border-gray-700 px-4 py-3 text-sm font-bold text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 hover:text-white"
     >
       Reset
     </button>
