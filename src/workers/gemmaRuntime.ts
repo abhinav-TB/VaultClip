@@ -4,6 +4,7 @@ import type { ModelLoadEvent, ModelLoadSource, WorkerRequest } from './types'
 import { sendModelLoadEvent, sendResponse } from './workerMessages'
 
 env.allowLocalModels = false
+configureModelFileHost()
 
 const GEMMA_MODEL_ID = 'onnx-community/gemma-4-E2B-it-ONNX'
 const GEMMA_REVISION = 'main'
@@ -310,4 +311,11 @@ function formatBytes(bytes?: number) {
   }
 
   return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`
+}
+
+function configureModelFileHost() {
+  if (self.location.hostname.endsWith('.workers.dev')) {
+    env.remoteHost = self.location.origin
+    env.remotePathTemplate = '/hf/{model}/resolve/{revision}/'
+  }
 }

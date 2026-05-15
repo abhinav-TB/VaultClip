@@ -3,6 +3,7 @@ import type { EmbedTextsPayload, EmbedTextsResult } from './types'
 import { sendResponse } from './workerMessages'
 
 env.allowLocalModels = false
+configureModelFileHost()
 
 type FeatureExtractor = (texts: string | string[], options: { pooling: 'mean'; normalize: true }) => Promise<unknown>
 
@@ -134,4 +135,11 @@ function normalizeRows(value: unknown, expectedRows: number): number[][] {
   }
 
   return embeddings
+}
+
+function configureModelFileHost() {
+  if (self.location.hostname.endsWith('.workers.dev')) {
+    env.remoteHost = self.location.origin
+    env.remotePathTemplate = '/hf/{model}/resolve/{revision}/'
+  }
 }
