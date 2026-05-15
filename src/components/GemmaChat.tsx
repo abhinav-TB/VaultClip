@@ -162,9 +162,15 @@ export const GemmaChat = ({ settings }: { settings: GenerationSettings }) => {
           }`} />
           <span className="text-sm font-medium text-gray-300">Gemma-E2B Local AI</span>
         </div>
-        <span className="text-xs text-gray-500 uppercase tracking-widest font-bold">
-          {modelReady ? 'Ready for inference' : modelLoading ? 'Loading model' : modelStatus === 'error' ? 'Model failed' : 'Model not loaded'}
-        </span>
+        {modelReady ? (
+          <span className="text-xs text-green-400 uppercase tracking-widest font-bold">Ready</span>
+        ) : modelLoading ? (
+          <span className="text-xs text-yellow-400 uppercase tracking-widest font-bold">Loading</span>
+        ) : modelStatus === 'error' ? (
+          <span className="text-xs text-red-400 uppercase tracking-widest font-bold">Failed</span>
+        ) : (
+          <span className="text-xs text-gray-500 uppercase tracking-widest font-bold">Not loaded</span>
+        )}
       </div>
 
       {!modelReady && (
