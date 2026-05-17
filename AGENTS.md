@@ -95,8 +95,7 @@ on VaultClip.
 - Run `npm run check` after meaningful TypeScript, worker, Redux, or UI changes.
 - If only documentation changes are made, run at least `npm run check:standards`
   when relevant.
-- Restore generated `tsconfig.*.tsbuildinfo` files after builds unless the user
-  explicitly wants them committed.
+- Do not commit generated `*.tsbuildinfo` files.
 - Use `npm run dev -- --host 127.0.0.1` when a local browser test is needed.
 
 ## Documentation Standard

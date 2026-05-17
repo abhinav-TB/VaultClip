@@ -28,6 +28,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# TypeScript build cache
+*.tsbuildinfo
+
 # Local Codex configuration
 .codex/
 
