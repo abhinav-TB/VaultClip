@@ -33,3 +33,6 @@ dist-ssr
 
 # Local opencode configuration
 .opencode/
+
+# Ops documentation
+ops.md
