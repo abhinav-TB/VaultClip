@@ -13,8 +13,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/your-org/vaultclip/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <a href="https://github.com/your-org/vaultclip/actions"><img src="https://github.com/your-org/vaultclip/actions/workflows/check.yml/badge.svg" alt="Build Status" /></a>
+  <a href="https://github.com/abhinav-TB/VaultClip"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="https://github.com/abhinav-TB/VaultClip/actions"><img src="https://github.com/abhinav-TB/VaultClip/actions/workflows/commit-lint.yml/badge.svg" alt="Build Status" /></a>
   <img src="https://img.shields.io/badge/WebGPU-Required-blue.svg" alt="Requires WebGPU" />
   <img src="https://img.shields.io/badge/version-0.1.0-purple.svg" alt="Version" />
 </p>
@@ -41,8 +41,6 @@
   - [Model Settings](#model-settings)
   - [Transcription Settings](#transcription-settings)
 - [Deployment](#deployment)
-  - [Cloudflare Pages](#cloudflare-pages)
-  - [Self-Hosting](#self-hosting)
 - [Contributing](#contributing)
   - [Development Setup](#development-setup)
   - [Code Standards](#code-standards)
@@ -152,8 +150,8 @@ With VaultClip, you get all of this without:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/vaultclip.git
-cd vaultclip
+git clone https://github.com/abhinav-TB/VaultClip.git
+cd VaultClip
 
 # Install dependencies
 npm install
@@ -195,39 +193,39 @@ npm run preview
 
 VaultClip is built as a modern single-page application with a clear separation between UI, state management, and compute-intensive workers.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         React UI Layer                          │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────┐  ┌─────────┐  │
-│  │ LandingPage │  │  VideoUpload │  │ GemmaChat│  │Settings │  │
-│  └─────────────┘  │    Panel     │  │          │  │  Modal  │  │
-│                   └──────────────┘  └──────────┘  └─────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Redux Toolkit Store                         │
-│  ┌────────┐  ┌────────┐  ┌───────┐  ┌────────┐  ┌──────────┐  │
-│  │  video │  │ audio  │  │ model │  │   RAG  │  │ context  │  │
-│  │ slice  │  │ slice  │  │ slice │  │ slice  │  │  slice   │  │
-│  └────────┘  └────────┘  └───────┘  └────────┘  └──────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        Web Workers                               │
-│  ┌──────────────────────────┐  ┌────────────────────────────┐  │
-│  │   pipeline.worker.ts     │  │     chat.worker.ts          │  │
-│  │  ┌────────────────────┐   │  │                            │  │
-│  │  │ ffmpegRuntime.ts  │   │  │  ┌──────────────────────┐   │  │
-│  │  │ (Audio Extraction)│   │  │  │ gemmaRuntime.ts     │   │  │
-│  │  └────────────────────┘   │  │  │ (Transformers.js)   │   │  │
-│  │  ┌────────────────────┐   │  │  │                      │   │  │
-│  │  │ transcriptionTask │   │  │  │                      │   │  │
-│  │  │                    │   │  │  └──────────────────────┘   │  │
-│  │  └────────────────────┘   │  │                            │  │
-│  └──────────────────────────┘  └────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+  subgraph UI["React UI Layer"]
+    LandingPage["LandingPage"]
+    VideoUploadPanel["VideoUploadPanel"]
+    GemmaChat["GemmaChat"]
+    SettingsModal["SettingsModal"]
+  end
+
+  subgraph Store["Redux Toolkit Store"]
+    VideoSlice["video slice"]
+    AudioSlice["audio slice"]
+    ModelSlice["model slice"]
+    RagSlice["RAG slice"]
+    ContextSlice["context slice"]
+  end
+
+  subgraph Workers["Web Workers"]
+    Pipeline["pipeline.worker.ts"]
+    Ffmpeg["ffmpegRuntime.ts<br/>audio extraction"]
+    Transcription["transcriptionTask.ts<br/>Gemma transcription"]
+    Frames["frameSummaryTask.ts<br/>visual summaries"]
+    Embeddings["embeddingTask.ts<br/>RAG embeddings"]
+    GemmaRuntime["gemmaRuntime.ts<br/>Transformers.js lifecycle"]
+  end
+
+  UI --> Store
+  Store --> Pipeline
+  Pipeline --> Ffmpeg
+  Pipeline --> Transcription
+  Pipeline --> Frames
+  Pipeline --> Embeddings
+  Pipeline --> GemmaRuntime
 ```
 
 ### Core Components
@@ -322,7 +320,7 @@ User selects media
 | **Media Processing** | ffmpeg.wasm |
 | **Code Quality** | ESLint, Prettier, TypeScript strict mode |
 | **CI/CD** | GitHub Actions |
-| **Deployment** | Cloudflare Pages / Static hosting |
+| **Deployment** | Cloudflare Workers with static assets |
 
 ---
 
@@ -364,17 +362,25 @@ The settings modal controls processing constraints:
 
 ## Deployment
 
-Any static file host can serve VaultClip:
+VaultClip deploys on Cloudflare Workers with static assets. The Worker serves
+the Vite build, provides SPA fallback for `/app`, and proxies Hugging Face model
+files through `/hf/...` to avoid deployed-browser CORS failures.
 
 ```bash
 # Build
 npm run build
 
-# Serve dist/ with any web server
-npx serve dist
-# or
-python -m http.server 8000 --directory dist
+# Deploy to Cloudflare Workers
+npx wrangler deploy
 ```
+
+Pull request and branch preview deployments use:
+
+```bash
+npx wrangler versions upload
+```
+
+Deployment configuration lives in `wrangler.jsonc`.
 
 ---
 
@@ -386,11 +392,11 @@ We welcome contributions! Please read this guide before submitting changes.
 
 ```bash
 # Fork and clone the repository
-git clone https://github.com/your-fork/vaultclip.git
-cd vaultclip
+git clone https://github.com/<your-username>/VaultClip.git
+cd VaultClip
 
 # Add upstream remote
-git remote add upstream https://github.com/your-org/vaultclip.git
+git remote add upstream https://github.com/abhinav-TB/VaultClip.git
 
 # Create a feature branch
 git checkout -b feature/your-feature-name
@@ -505,7 +511,8 @@ VaultClip has no backend, no API, and no server component. The only network requ
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project uses the MIT License. See the repository license metadata on
+[GitHub](https://github.com/abhinav-TB/VaultClip).
 
 ---
 
@@ -514,7 +521,7 @@ This project is licensed under the [MIT License](LICENSE).
 - **Google** — For releasing Gemma, the model powering VaultClip's AI capabilities
 - **Hugging Face** — For Transformers.js, enabling in-browser ML inference
 - **FFmpeg** — For the powerful audio/video processing library
-- **Cloudflare** — For Pages and R2 hosting infrastructure
+- **Cloudflare** — For Workers, static assets, and R2-compatible hosting options
 - **All Contributors** — For making VaultClip better with every contribution
 
 ---
@@ -524,7 +531,7 @@ This project is licensed under the [MIT License](LICENSE).
 </p>
 
 <p align="center">
-  <a href="https://github.com/your-org/vaultclip">GitHub</a> •
-  <a href="https://github.com/your-org/vaultclip/issues">Issues</a> •
-  <a href="https://github.com/your-org/vaultclip/discussions">Discussions</a>
+  <a href="https://github.com/abhinav-TB/VaultClip">GitHub</a> •
+  <a href="https://github.com/abhinav-TB/VaultClip/issues">Issues</a> •
+  <a href="https://github.com/abhinav-TB/VaultClip/discussions">Discussions</a>
 </p>
