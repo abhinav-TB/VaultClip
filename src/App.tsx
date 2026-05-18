@@ -40,6 +40,7 @@ function App() {
             settings={generationSettings}
             onSettingsChange={setGenerationSettings}
             settingsOpen={settingsOpen}
+            onSettingsOpen={() => setSettingsOpen(true)}
             onSettingsClose={() => setSettingsOpen(false)}
           />
         }
