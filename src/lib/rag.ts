@@ -56,6 +56,24 @@ export function buildRagChunks({ sessionId, transcriptSegments, frameSummaries }
     })
   }
 
+  const transcriptIds = new Set(transcriptSegments.map((segment) => segment.id))
+  for (const summary of frameSummaries) {
+    if (transcriptIds.has(summary.segmentId)) continue
+
+    const text = `Visual Summary:\n${summary.summary}`
+    chunks.push({
+      id: `${sessionId}-rag-frame-${summary.segmentId}`,
+      sessionId,
+      source: 'frame-summary',
+      startTime: summary.startTime,
+      endTime: summary.endTime,
+      text,
+      tokensEstimate: estimateTokens(text),
+      keywords: Array.from(new Set(tokenize(text))).slice(0, 24),
+      sourceIds: [summary.segmentId],
+    })
+  }
+
   return chunks
 }
 

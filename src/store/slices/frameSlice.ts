@@ -150,7 +150,7 @@ export const frameSlice = createSlice({
       if (state.sessionId && state.sessionId !== action.payload.sessionId) return
       state.summaryStatus = 'summarizing'
       state.summaryProgress = 0
-      state.summaryPhase = 'Preparing frame summaries'
+      state.summaryPhase = 'Preparing visual context'
       state.summaryError = null
       state.summaryWarnings = []
       state.summaries = []
@@ -173,7 +173,7 @@ export const frameSlice = createSlice({
       if (state.sessionId && state.sessionId !== action.payload.sessionId) return
       state.summaryStatus = 'ready'
       state.summaryProgress = 100
-      state.summaryPhase = 'Frame summaries ready'
+      state.summaryPhase = 'Visual context ready'
       state.summaryError = null
       state.summaryWarnings = action.payload.warnings
       state.summaries = [...action.payload.summaries].sort((a, b) => a.startTime - b.startTime)

@@ -3,6 +3,7 @@
   "name": "vaultclip",
   "main": "src/cloudflareWorker.ts",
   "compatibility_date": "2026-05-15",
+  "preview_urls": true,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

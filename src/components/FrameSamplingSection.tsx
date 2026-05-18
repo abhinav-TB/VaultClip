@@ -113,11 +113,11 @@ export const FrameSamplingSection = ({
             <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-slate-100">Frame summaries</p>
+                  <p className="text-sm font-semibold text-slate-100">Visual context</p>
                   <p className="mt-1 text-xs text-slate-500">
                     {summaryStatus === 'ready'
-                      ? `${summaries.length} of ${samples.length} frames summarized.`
-                      : summaryPhase ?? 'Gemma will summarize each sampled frame.'}
+                      ? `${summaries.length} visual ${summaries.length === 1 ? 'segment' : 'segments'} created from ${samples.length} sampled ${samples.length === 1 ? 'frame' : 'frames'}.`
+                      : summaryPhase ?? 'Gemma will summarize sampled frames into visual context segments.'}
                   </p>
                 </div>
                 {isSummarizing && <span className="font-mono text-xs text-slate-400">{summaryProgress}%</span>}
@@ -134,7 +134,7 @@ export const FrameSamplingSection = ({
               )}
               {summaryStatus === 'error' && (
                 <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
-                  <p className="text-sm font-semibold text-red-100">Frame summarization failed</p>
+                  <p className="text-sm font-semibold text-red-100">Visual context failed</p>
                   <p className="mt-1 text-sm leading-6 text-red-200/80">{summaryError}</p>
                 </div>
               )}

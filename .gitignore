@@ -28,5 +28,14 @@ dist-ssr
 .env.*
 !.env.example
 
+# TypeScript build cache
+*.tsbuildinfo
+
 # Local Codex configuration
 .codex/
+
+# Local opencode configuration
+.opencode/
+
+# Ops documentation
+ops.md

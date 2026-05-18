@@ -46,13 +46,56 @@ on VaultClip.
 - Direct audio uploads skip extraction but still register audio bytes for
   transcription.
 
+## Operations Context
+
+- These notes are the tracked source of truth for GitHub branch protection,
+  Actions, semantic-release, Cloudflare Workers deployments, preview URLs, and
+  common CI or deploy failures. Keep operational guidance here unless a tracked
+  runbook is intentionally added to the repository.
+- Branch flow is `feature branch -> development -> main -> release`.
+  `development` is the integration branch; `main` is the release branch.
+- New PRs should target `development` by default when the repository default
+  branch is set to `development`. Releases still only run from `main`.
+- Pull requests into `development` are expected to require one approval from any
+  eligible reviewer, the `commit-lint` status check, up-to-date branches,
+  blocked force pushes, and restricted deletions. Code owner review is not
+  required unless `.github/CODEOWNERS` is intentionally reintroduced.
+- Do not enable GitHub code scanning requirements unless a CodeQL or equivalent
+  scanner exists and has successfully uploaded results.
+- Commit messages must use the allowed conventional types in
+  `commitlint.config.js`: `feat`, `fix`, `docs`, `style`, `refactor`, `test`,
+  `chore`, or `revert`. Use `chore` for workflow and ops changes unless the
+  commitlint config is expanded.
+- The release workflow runs on pushes to `main`. It runs a `verify` job first,
+  then the `release` job waits on the `production-release` GitHub environment
+  approval before semantic-release publishes.
+- semantic-release uses `.releaserc.json`, releases only from `main`, updates
+  `CHANGELOG.md`, creates GitHub releases, and pushes the changelog commit
+  through `@semantic-release/git`. Keep release workflow permissions sufficient
+  for `contents`, `issues`, and `pull-requests` writes.
+- Cloudflare deploys this app as a Worker with static assets, not classic Pages.
+  `wrangler.jsonc` controls the Worker entrypoint, `ASSETS` binding, SPA
+  fallback, and preview URLs.
+- Cloudflare production builds use `npm run build` and `npx wrangler deploy`.
+  Non-production/PR previews use `npx wrangler versions upload`.
+- Each PR or branch preview should point at that PR branch's latest deployed
+  commit or exact Worker version, not at shared `development` or production.
+- Cloudflare Workers static assets have a 25 MiB per-file limit. Do not
+  statically import `ffmpeg-core.wasm`; `src/workers/ffmpegRuntime.ts` must load
+  the large ffmpeg WASM from `VITE_FFMPEG_WASM_URL` or the pinned CDN fallback.
+- Deployed Worker origins use the `/hf/...` proxy in `src/cloudflareWorker.ts`
+  for Hugging Face model files to avoid browser CORS failures. Local Vite dev
+  must continue using direct Hugging Face URLs because localhost does not serve
+  the Worker proxy route.
+- If a custom production domain is added, update model host selection so that
+  the custom domain also uses the `/hf` proxy.
+
 ## Required Checks
 
 - Run `npm run check` after meaningful TypeScript, worker, Redux, or UI changes.
 - If only documentation changes are made, run at least `npm run check:standards`
   when relevant.
-- Restore generated `tsconfig.*.tsbuildinfo` files after builds unless the user
-  explicitly wants them committed.
+- Do not commit generated `*.tsbuildinfo` files.
 - Use `npm run dev -- --host 127.0.0.1` when a local browser test is needed.
 
 ## Documentation Standard

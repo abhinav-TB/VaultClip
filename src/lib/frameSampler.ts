@@ -40,7 +40,6 @@ export async function sampleVideoFrames({
   video.preload = 'auto'
   video.muted = true
   video.playsInline = true
-  video.crossOrigin = 'anonymous'
 
   try {
     onProgress?.(1, 'Loading video for frame sampling')
@@ -121,8 +120,30 @@ export function buildFrameTargets(
 
 function loadVideoForSampling(video: HTMLVideoElement, fileUrl: string) {
   return new Promise<void>((resolve, reject) => {
-    video.onloadedmetadata = () => resolve()
-    video.onerror = () => reject(new Error('The selected video could not be loaded for frame sampling.'))
+    const timeout = window.setTimeout(() => {
+      cleanup()
+      reject(new Error('Timed out while loading the selected video for frame sampling.'))
+    }, 10000)
+
+    const cleanup = () => {
+      window.clearTimeout(timeout)
+      video.onloadedmetadata = null
+      video.onloadeddata = null
+      video.onerror = null
+    }
+
+    const resolveWhenReady = () => {
+      if (!video.videoWidth || !video.videoHeight) return
+      cleanup()
+      resolve()
+    }
+
+    video.onloadedmetadata = resolveWhenReady
+    video.onloadeddata = resolveWhenReady
+    video.onerror = () => {
+      cleanup()
+      reject(new Error('The selected video could not be loaded for frame sampling.'))
+    }
     video.src = fileUrl
     video.load()
   })
@@ -130,8 +151,8 @@ function loadVideoForSampling(video: HTMLVideoElement, fileUrl: string) {
 
 function seekVideo(video: HTMLVideoElement, timestamp: number) {
   return new Promise<void>((resolve, reject) => {
-    if (Math.abs(video.currentTime - timestamp) < 0.001) {
-      window.requestAnimationFrame(() => resolve())
+    if (Math.abs(video.currentTime - timestamp) < 0.001 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      waitForDecodedFrame(video).then(resolve, reject)
       return
     }
 
@@ -143,18 +164,45 @@ function seekVideo(video: HTMLVideoElement, timestamp: number) {
     const cleanup = () => {
       window.clearTimeout(timeout)
       video.onseeked = null
+      video.onloadeddata = null
+      video.ontimeupdate = null
       video.onerror = null
     }
 
-    video.onseeked = () => {
+    const resolveWhenFrameIsReady = () => {
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
       cleanup()
-      resolve()
+      waitForDecodedFrame(video).then(resolve, reject)
     }
+
+    video.onseeked = resolveWhenFrameIsReady
+    video.onloadeddata = resolveWhenFrameIsReady
+    video.ontimeupdate = resolveWhenFrameIsReady
     video.onerror = () => {
       cleanup()
       reject(new Error(`The browser could not seek to ${timestamp.toFixed(2)}s.`))
     }
     video.currentTime = timestamp
+  })
+}
+
+function waitForDecodedFrame(video: HTMLVideoElement) {
+  return new Promise<void>((resolve) => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeout)
+      resolve()
+    }
+    const timeout = window.setTimeout(finish, 250)
+
+    if ('requestVideoFrameCallback' in video) {
+      video.requestVideoFrameCallback(finish)
+      return
+    }
+
+    window.requestAnimationFrame(finish)
   })
 }
 
