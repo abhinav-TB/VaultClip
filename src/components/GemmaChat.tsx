@@ -373,7 +373,7 @@ function buildGroundedPrompt(userPrompt: string, retrievedChunks: RagRetrievedCh
     `The indexed source is a ${mediaDescriptor}.`,
     mediaKind === 'audio'
       ? 'The context comes from audio transcription. Do not describe visual details unless they are present in attached files or explicit user-provided context.'
-      : 'The context may include both transcript and visual frame summaries from the video.',
+      : 'The context may include both transcript and visual context segments from the video.',
     'Answer the user question using the retrieved local media context below.',
     'Synthesize the context into a single, cohesive response. Do not explicitly say "one segment mentions" or "another segment shows". Write a natural response based on the entire context combined.',
     'Use the provided citation numbers and timestamp ranges when evidence supports the answer.',

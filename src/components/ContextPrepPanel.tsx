@@ -92,7 +92,7 @@ const ChatReadinessNotice = ({
   if (modelReady && contextReady) {
     return (
       <div className="mt-3 rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-xs leading-5 text-green-100/80">
-        Chat is grounded in {transcriptCount} transcript segments and {frameSummaryCount} frame summaries.
+        Chat is grounded in {formatTranscriptSegmentCount(transcriptCount)} and {formatVisualSegmentCount(frameSummaryCount)}.
       </div>
     )
   }
@@ -150,14 +150,14 @@ const ContextIndexStatus = ({
   const hasFrameSummaries = frameSummaryCount > 0
   const canStartIndex = canBuildIndex || hasTranscript || hasFrameSummaries
   const title = waiting
-    ? 'Context index: waiting for transcript or frame summaries'
+    ? 'Context index: waiting for transcript or visual context'
     : ready
       ? `Context index: ${chunkCount} chunks ready`
       : `Context index: ${phase ?? status}`
   const detail = waiting
     ? getWaitingContextMessage(transcriptStatus, hasTranscript, frameSummaryStatus, hasFrameSummaries)
     : ready
-      ? `${transcriptCount} transcript segments and ${frameSummaryCount} frame summaries are available for timestamped retrieval.`
+      ? `${formatTranscriptSegmentCount(transcriptCount)} and ${formatVisualSegmentCount(frameSummaryCount)} are available for timestamped retrieval.`
       : phase ?? 'Preparing timestamped retrieval context.'
   const elapsedLabel = useElapsedTimeLabel(startedAtMs, completedAtMs, indexing)
   const dotClass = status === 'error'
@@ -202,7 +202,7 @@ const ContextIndexStatus = ({
         </div>
       )}
       {experienceMode === 'power' && frameSummaryStatus === 'error' && frameSummaryError && (
-        <p className="mt-2 leading-5 text-red-200/80">Frame summaries failed: {frameSummaryError}</p>
+        <p className="mt-2 leading-5 text-red-200/80">Visual context failed: {frameSummaryError}</p>
       )}
       {warning && <p className="mt-2 leading-5 text-yellow-200/80">{warning}</p>}
       {error && <p className="mt-2 leading-5 text-red-200/80">{error}</p>}
@@ -248,10 +248,18 @@ function getWaitingContextMessage(transcriptStatus: string, hasTranscript: boole
       ? 'Transcript is ready.'
       : 'Run Transcribe to add spoken context.'
   const frameText = frameSummaryStatus === 'summarizing'
-    ? 'Frame summaries are currently running.'
+    ? 'Visual context is currently running.'
     : frameSummaryStatus === 'ready'
-      ? 'Frame summaries are ready.'
+      ? 'Visual context is ready.'
       : 'Sample and summarize frames to add visual context.'
 
   return `${transcriptText} ${frameText}`
+}
+
+function formatTranscriptSegmentCount(count: number) {
+  return `${count} transcript ${count === 1 ? 'segment' : 'segments'}`
+}
+
+function formatVisualSegmentCount(count: number) {
+  return `${count} visual context ${count === 1 ? 'segment' : 'segments'}`
 }

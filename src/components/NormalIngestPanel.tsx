@@ -70,7 +70,7 @@ export const NormalIngestPanel = ({
             <span className="mt-1 block text-xs leading-5 text-slate-500">
               {audioOnlyLocked
                 ? 'Audio files always use transcript-only indexing.'
-                : 'Skip visual frame summaries and build the index from the transcript only.'}
+                : 'Skip visual context and build the index from the transcript only.'}
             </span>
           </span>
           <input

@@ -8,7 +8,7 @@ export function getChatBlockedMessage(modelReady: boolean, contextReady: boolean
   if (!contextReady && canBuildIndex) {
     return 'Build the context index above to enable timestamped media Q&A.'
   }
-  return 'Prepare transcript or frame summaries first, then build the context index.'
+  return 'Prepare transcript or visual context first, then build the context index.'
 }
 
 export function getChatInputPlaceholder(modelReady: boolean, contextReady: boolean, canBuildIndex: boolean) {
