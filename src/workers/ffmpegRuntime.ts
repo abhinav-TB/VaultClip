@@ -1,7 +1,6 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import type { WorkerRequest } from './types'
 import { sendResponse } from './workerMessages'
-import ffmpegClassWorkerURL from '../../node_modules/@ffmpeg/ffmpeg/dist/esm/worker.js?url'
 import ffmpegCoreURL from '../../node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js?url'
 
 let ffmpeg: FFmpeg | null = null
@@ -33,7 +32,6 @@ export async function getFFmpeg(taskType: WorkerRequest['type']) {
   })
 
   await ffmpeg.load({
-    classWorkerURL: ffmpegClassWorkerURL,
     coreURL: ffmpegCoreURL,
     wasmURL: getFFmpegWasmUrl(),
   })
