@@ -5,6 +5,7 @@ import type { FrameSummaryInput, FrameSummaryResultItem, ProcessFramesPayload, P
 import { sendResponse } from './workerMessages'
 
 const FRAME_SUMMARY_MAX_NEW_TOKENS = 96
+const MAX_FRAMES_PER_SEGMENT_SUMMARY = 4
 
 /**
  * Summarizes sampled video frames segment-by-segment through Gemma.
@@ -49,7 +50,8 @@ export async function handleProcessFrames(payload: ProcessFramesPayload) {
 
     try {
       const segmentDuration = Math.round(segment.endTime - segment.startTime)
-      const summary = await summarizeSegmentFrames(segmentFrames, segmentDuration, processor, model, tokenizer)
+      const representativeFrames = selectRepresentativeFrames(segmentFrames, MAX_FRAMES_PER_SEGMENT_SUMMARY)
+      const summary = await summarizeSegmentFrames(representativeFrames, segmentDuration, processor, model, tokenizer)
       const result: FrameSummaryResultItem = {
         segmentId: segment.id,
         startTime: segment.startTime,
@@ -90,6 +92,16 @@ export async function handleProcessFrames(payload: ProcessFramesPayload) {
       summaries,
       warnings,
     } satisfies ProcessFramesResult,
+  })
+}
+
+function selectRepresentativeFrames(frames: FrameSummaryInput[], maxFrames: number) {
+  if (frames.length <= maxFrames) return frames
+  if (maxFrames <= 1) return [frames[0]]
+
+  return Array.from({ length: maxFrames }, (_, index) => {
+    const sourceIndex = Math.round((index * (frames.length - 1)) / (maxFrames - 1))
+    return frames[sourceIndex]
   })
 }
 

@@ -8,10 +8,11 @@ interface AppLayoutProps {
   settings: GenerationSettings
   onSettingsChange: (settings: GenerationSettings) => void
   settingsOpen: boolean
+  onSettingsOpen: () => void
   onSettingsClose: () => void
 }
 
-export function AppLayout({ settings, onSettingsChange, settingsOpen, onSettingsClose }: AppLayoutProps) {
+export function AppLayout({ settings, onSettingsChange, settingsOpen, onSettingsOpen, onSettingsClose }: AppLayoutProps) {
   return (
     <div className="flex min-h-screen flex-col bg-slate-900 font-sans text-slate-100 selection:bg-blue-500/30">
       <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900/90 p-4 backdrop-blur-md">
@@ -31,7 +32,7 @@ export function AppLayout({ settings, onSettingsChange, settingsOpen, onSettings
             <ModelRuntimeStatus />
             <button
               type="button"
-              onClick={onSettingsClose}
+              onClick={onSettingsOpen}
               className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-400 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
               aria-label="Open settings"
               title="Settings"

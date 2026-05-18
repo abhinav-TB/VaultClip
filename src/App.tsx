@@ -21,8 +21,8 @@ function App() {
     audioFormat: 'wav',
     transcriptChunkSeconds: 30,
     transcriptOverlapSeconds: 0.1,
-    frameSamplingMode: 'count',
-    frameIntervalSeconds: 5,
+    frameSamplingMode: 'interval',
+    frameIntervalSeconds: 9,
     targetFrameCount: 20,
     maxFrameSamples: 60,
     frameMaxWidth: 512,
@@ -40,6 +40,7 @@ function App() {
             settings={generationSettings}
             onSettingsChange={setGenerationSettings}
             settingsOpen={settingsOpen}
+            onSettingsOpen={() => setSettingsOpen(true)}
             onSettingsClose={() => setSettingsOpen(false)}
           />
         }

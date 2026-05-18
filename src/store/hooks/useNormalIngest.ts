@@ -54,6 +54,8 @@ export function useNormalIngest(
 
     try {
       let audioBytes = getAudioData(sessionId)
+      const shouldBuildVisualContext = video.mediaKind === 'video' && !audioOnlyIndex
+      let contextWarning: string | null = null
       if (video.mediaKind === 'video' && !audioBytes) {
         const file = getVideoFile(sessionId)
         if (!file) {
@@ -74,58 +76,73 @@ export function useNormalIngest(
         dispatch(setProcessingProgress(0))
         dispatch(setProcessingError(''))
 
-        const result = await workerClient.runTask<ExtractAudioResult>('EXTRACT_AUDIO', {
-          sessionId,
-          file,
-          inputName: video.name ?? file.name,
-          outputFormat: settings.audioFormat,
-          sampleRate: settings.audioSampleRate,
-        }, (progress) => {
-          const rounded = Math.round(progress)
-          dispatch(setAudioProgress({
-            progress,
-            phase: progress < 15 ? 'Loading ffmpeg' : progress < 96 ? 'Extracting audio' : 'Finalizing audio',
+        try {
+          const result = await workerClient.runTask<ExtractAudioResult>('EXTRACT_AUDIO', {
+            sessionId,
+            file,
+            inputName: video.name ?? file.name,
+            outputFormat: settings.audioFormat,
+            sampleRate: settings.audioSampleRate,
+          }, (progress) => {
+            const rounded = Math.round(progress)
+            dispatch(setAudioProgress({
+              progress,
+              phase: progress < 15 ? 'Loading ffmpeg' : progress < 96 ? 'Extracting audio' : 'Finalizing audio',
+            }))
+            dispatch(setProcessingProgress(progress))
+            publish('Preparing audio', Math.min(35, 8 + Math.round(rounded * 0.27)))
+          }, (log) => {
+            if (typeof log === 'string') {
+              dispatch(setAudioProgress({ progress: audio.progress, phase: log }))
+            }
+          })
+
+          if (activeSessionRef.current !== result.sessionId) return
+
+          const audioBytesForBlob: Uint8Array<ArrayBuffer> = new Uint8Array(result.bytes.byteLength)
+          audioBytesForBlob.set(result.bytes)
+          const objectUrl = URL.createObjectURL(new Blob([audioBytesForBlob.buffer], { type: result.mimeType }))
+          onAudioObjectUrl?.(objectUrl)
+          registerAudioData(result.sessionId, {
+            bytes: result.bytes,
+            mimeType: result.mimeType,
+            sampleRate: result.sampleRate,
+            duration: video.duration,
+          })
+          audioBytes = getAudioData(result.sessionId)
+          dispatch(setAudioReady({
+            sessionId: result.sessionId,
+            objectUrl,
+            format: result.format,
+            sampleRate: result.sampleRate,
+            channels: result.channels,
+            duration: video.duration,
+            size: result.size,
+            fileName: result.fileName,
+            mimeType: result.mimeType,
           }))
-          dispatch(setProcessingProgress(progress))
-          publish('Preparing audio', Math.min(35, 8 + Math.round(rounded * 0.27)))
-        }, (log) => {
-          if (typeof log === 'string') {
-            dispatch(setAudioProgress({ progress: audio.progress, phase: log }))
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err)
+          if (!isAudioUnavailableError(message) || !shouldBuildVisualContext) {
+            throw err
           }
-        })
 
-        if (activeSessionRef.current !== result.sessionId) return
-
-        const audioBytesForBlob: Uint8Array<ArrayBuffer> = new Uint8Array(result.bytes.byteLength)
-        audioBytesForBlob.set(result.bytes)
-        const objectUrl = URL.createObjectURL(new Blob([audioBytesForBlob.buffer], { type: result.mimeType }))
-        onAudioObjectUrl?.(objectUrl)
-        registerAudioData(result.sessionId, {
-          bytes: result.bytes,
-          mimeType: result.mimeType,
-          sampleRate: result.sampleRate,
-          duration: video.duration,
-        })
-        audioBytes = getAudioData(result.sessionId)
-        dispatch(setAudioReady({
-          sessionId: result.sessionId,
-          objectUrl,
-          format: result.format,
-          sampleRate: result.sampleRate,
-          channels: result.channels,
-          duration: video.duration,
-          size: result.size,
-          fileName: result.fileName,
-          mimeType: result.mimeType,
-        }))
+          contextWarning = 'Audio could not be extracted. Built visual-only context from sampled frames.'
+          dispatch(setAudioError({ sessionId, message: 'Audio could not be extracted. Building visual-only context from sampled frames instead.' }))
+          dispatch(setProcessingError(''))
+        }
       }
 
-      if (!audioBytes) {
+      if (!audioBytes && audioOnlyIndex) {
+        throw new Error('This video has no audio track, so audio-only indexing cannot run. Turn off Audio-only index and build visual context instead.')
+      }
+
+      if (!audioBytes && !shouldBuildVisualContext) {
         throw new Error('Audio is not available for transcription. Replace the file and try again.')
       }
 
       let segments: TranscriptSegment[] = transcript.transcriptSegments
-      if (!segments.length) {
+      if (audioBytes && !segments.length) {
         publish('Transcribing media', 36)
         dispatch(setTranscriptTranscribing())
         dispatch(setProcessingStatus('transcribing'))
@@ -168,12 +185,12 @@ export function useNormalIngest(
         }))
       }
 
-      if (!segments.length) {
+      if (!segments.length && !shouldBuildVisualContext) {
         throw new Error('No transcript segments were created. Try a different file, or switch to Power User mode for troubleshooting details.')
       }
 
       let frameSummaries: FrameSummary[] = []
-      if (video.mediaKind === 'video' && !audioOnlyIndex) {
+      if (shouldBuildVisualContext) {
         publish('Sampling visual context', 58)
         clearFrameArtifacts?.()
         dispatch(setFrameSamplingStarted({
@@ -304,13 +321,17 @@ export function useNormalIngest(
         frameSummaries,
       })
 
+      if (!chunks.length) {
+        throw new Error('No transcript or visual context chunks were created for this file.')
+      }
+
       if (settings.retrievalMode === 'lexical') {
         unregisterChunkEmbeddings(sessionId)
         dispatch(setRagIndexReady({
           sessionId,
           chunks,
           embeddingStatus: 'unavailable',
-          warning: 'Lexical-only retrieval is enabled.',
+          warning: contextWarning ? `Lexical-only retrieval is enabled. ${contextWarning}` : 'Lexical-only retrieval is enabled.',
           completedAtMs: Date.now(),
         }))
       } else {
@@ -334,7 +355,7 @@ export function useNormalIngest(
           sessionId,
           chunks,
           embeddingStatus: 'ready',
-          warning: null,
+          warning: contextWarning,
           completedAtMs: Date.now(),
         }))
       }
@@ -376,6 +397,13 @@ export function useNormalIngest(
     buildIndex,
     ...state,
   }
+}
+
+function isAudioUnavailableError(message: string) {
+  const normalizedMessage = message.toLowerCase()
+  return normalizedMessage.includes('no audio track')
+    || normalizedMessage.includes('could not inspect this video for an audio track')
+    || normalizedMessage.includes('ffmpeg exited with code')
 }
 
 function blobToDataUrl(blob: Blob) {
